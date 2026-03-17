@@ -912,7 +912,10 @@
                 headers.set('Authorization', `Bearer ${authToken}`);
             }
             const controller = new AbortController();
-            const timeoutMs = typeof options.timeoutMs === 'number' ? options.timeoutMs : 15000;
+            const u = String(url || '');
+            const timeoutMs = typeof options.timeoutMs === 'number'
+                ? options.timeoutMs
+                : (u.startsWith('/api/upload/') || u.startsWith('/api/conversions/init') ? 120000 : 60000);
             const t = setTimeout(() => controller.abort(), Math.max(1000, timeoutMs));
             let resp;
             try {
@@ -2196,7 +2199,8 @@
                 setActivePhase('processing', currentConversionId);
                 startStatusCheck();
             } catch (error) {
-                showError('Erro de conexão. Tente novamente.');
+                const msg = error && error.message ? String(error.message) : 'Erro de conexão. Tente novamente.';
+                showError(msg);
                 clearActiveConversion();
             }
         });
