@@ -818,6 +818,64 @@ def _db_get_pages_map(conversion_id):
         finally:
             conn.close()
 
+def _db_get_page_by_filename(conversion_id, filename):
+    if FIRESTORE_CLIENT is not None:
+        try:
+            doc_id = str(int(filename.rsplit('_', 1)[-1].split('.')[0]))
+        except Exception:
+            doc_id = None
+        if doc_id:
+            try:
+                pdoc = (
+                    FIRESTORE_CLIENT.collection('conversions')
+                    .document(conversion_id)
+                    .collection('pages')
+                    .document(doc_id)
+                    .get()
+                )
+                if pdoc.exists:
+                    return pdoc.to_dict() or {}
+            except Exception:
+                pass
+        try:
+            pages = (
+                FIRESTORE_CLIENT.collection('conversions')
+                .document(conversion_id)
+                .collection('pages')
+                .where('filename', '==', filename)
+                .limit(1)
+                .stream()
+            )
+            for p in pages:
+                return p.to_dict() or {}
+        except Exception:
+            return None
+        return None
+    with DB_LOCK:
+        conn = _db_connect()
+        try:
+            row = conn.execute(
+                f'SELECT page_number, filename, full_path, display_label, text, text_length FROM pages WHERE conversion_id={_ph()} AND filename={_ph()} LIMIT 1',
+                (conversion_id, filename)
+            ).fetchone()
+            return dict(row) if row else None
+        finally:
+            conn.close()
+
+def _db_update_page_full_path(conversion_id, filename, full_path):
+    if FIRESTORE_CLIENT is not None:
+        return
+    with DB_LOCK:
+        conn = _db_connect()
+        try:
+            conn.execute(
+                f'UPDATE pages SET full_path={_ph()} WHERE conversion_id={_ph()} AND filename={_ph()}',
+                (full_path, conversion_id, filename)
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
 def _db_get_upload_session(conversion_id):
     if FIRESTORE_CLIENT is not None:
         return None
@@ -2952,7 +3010,37 @@ def share_play(share_token, filename):
     conv = _db_get_conversion_by_share_token(share_token)
     if not _share_is_active(conv):
         return jsonify({'error': 'Link inválido ou expirado'}), 404
-    audio_path = _resolve_audio_path(conv.get('conversion_id'), None, filename=filename)
+    cid = conv.get('conversion_id')
+    safe_name = secure_filename(filename)
+    audio_path = _resolve_audio_path(cid, None, filename=filename)
+    if (not audio_path or not os.path.exists(audio_path)) and cid:
+        saved = _db_get_conversion(cid) or {}
+        page = _db_get_page_by_filename(cid, safe_name) or {}
+        text = (page.get('text') or '').strip()
+        options = saved.get('options') if isinstance(saved.get('options'), dict) else {}
+        if text:
+            out_dir = os.path.join(app.config['AUDIO_FOLDER'], secure_filename(cid))
+            out_path = os.path.join(out_dir, safe_name)
+            res = tts_to_file_with_alignment(
+                text,
+                out_path,
+                lang=str(options.get('lang') or 'pt'),
+                speed=float(options.get('speed') or 1.0),
+                voice_type=str(options.get('voice_type') or 'default'),
+                enhanced_voice=str(options.get('enhanced_voice') or 'default'),
+                tts_engine=str(options.get('tts_engine') or 'gtts'),
+                tts_voice=(options.get('tts_voice') or None),
+                sapi_voice=str(options.get('sapi_voice') or ''),
+                use_offline=bool(options.get('use_offline', False)),
+                normalize_audio=bool(options.get('normalize_audio', False)),
+                trim_silence=bool(options.get('trim_silence', False))
+            )
+            audio_path = res.get('path') or audio_path
+            if audio_path and os.path.exists(audio_path):
+                try:
+                    _db_update_page_full_path(cid, safe_name, audio_path)
+                except Exception:
+                    pass
     if not audio_path or not os.path.exists(audio_path):
         return jsonify({'error': 'Arquivo de áudio não encontrado'}), 404
     resp = send_file(audio_path, conditional=False)
@@ -2966,10 +3054,39 @@ def share_download(share_token, filename):
     conv = _db_get_conversion_by_share_token(share_token)
     if not _share_is_active(conv):
         return jsonify({'error': 'Link inválido ou expirado'}), 404
-    audio_path = _resolve_audio_path(conv.get('conversion_id'), None, filename=filename)
+    cid = conv.get('conversion_id')
+    safe_name = secure_filename(filename)
+    audio_path = _resolve_audio_path(cid, None, filename=filename)
+    if (not audio_path or not os.path.exists(audio_path)) and cid:
+        saved = _db_get_conversion(cid) or {}
+        page = _db_get_page_by_filename(cid, safe_name) or {}
+        text = (page.get('text') or '').strip()
+        options = saved.get('options') if isinstance(saved.get('options'), dict) else {}
+        if text:
+            out_dir = os.path.join(app.config['AUDIO_FOLDER'], secure_filename(cid))
+            out_path = os.path.join(out_dir, safe_name)
+            res = tts_to_file_with_alignment(
+                text,
+                out_path,
+                lang=str(options.get('lang') or 'pt'),
+                speed=float(options.get('speed') or 1.0),
+                voice_type=str(options.get('voice_type') or 'default'),
+                enhanced_voice=str(options.get('enhanced_voice') or 'default'),
+                tts_engine=str(options.get('tts_engine') or 'gtts'),
+                tts_voice=(options.get('tts_voice') or None),
+                sapi_voice=str(options.get('sapi_voice') or ''),
+                use_offline=bool(options.get('use_offline', False)),
+                normalize_audio=bool(options.get('normalize_audio', False)),
+                trim_silence=bool(options.get('trim_silence', False))
+            )
+            audio_path = res.get('path') or audio_path
+            if audio_path and os.path.exists(audio_path):
+                try:
+                    _db_update_page_full_path(cid, safe_name, audio_path)
+                except Exception:
+                    pass
     if not audio_path or not os.path.exists(audio_path):
         return jsonify({'error': 'Arquivo de áudio não encontrado'}), 404
-    safe_name = secure_filename(filename)
     resp = send_file(audio_path, as_attachment=True, download_name=safe_name, conditional=False)
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     resp.headers['Pragma'] = 'no-cache'
@@ -3377,6 +3494,35 @@ def download_audio(conversion_id, filename):
         audio_path = os.path.join(app.config['AUDIO_FOLDER'], safe_conversion, safe_name)
         if not os.path.exists(audio_path):
             audio_path = os.path.join(app.config['AUDIO_FOLDER'], safe_name)
+        if not os.path.exists(audio_path):
+            saved = _db_get_conversion(conversion_id) or {}
+            page = _db_get_page_by_filename(conversion_id, safe_name) or {}
+            text = (page.get('text') or '').strip()
+            options = saved.get('options') if isinstance(saved.get('options'), dict) else {}
+            if text:
+                out_dir = os.path.join(app.config['AUDIO_FOLDER'], safe_conversion)
+                out_path = os.path.join(out_dir, safe_name)
+                res = tts_to_file_with_alignment(
+                    text,
+                    out_path,
+                    lang=str(options.get('lang') or 'pt'),
+                    speed=float(options.get('speed') or 1.0),
+                    voice_type=str(options.get('voice_type') or 'default'),
+                    enhanced_voice=str(options.get('enhanced_voice') or 'default'),
+                    tts_engine=str(options.get('tts_engine') or 'gtts'),
+                    tts_voice=(options.get('tts_voice') or None),
+                    sapi_voice=str(options.get('sapi_voice') or ''),
+                    use_offline=bool(options.get('use_offline', False)),
+                    normalize_audio=bool(options.get('normalize_audio', False)),
+                    trim_silence=bool(options.get('trim_silence', False))
+                )
+                audio_path = res.get('path') or audio_path
+                if audio_path and os.path.exists(audio_path):
+                    try:
+                        _db_update_page_full_path(conversion_id, safe_name, audio_path)
+                    except Exception:
+                        pass
+
         if os.path.exists(audio_path):
             resp = send_file(audio_path, as_attachment=True, download_name=safe_name, conditional=False)
             resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
@@ -3396,6 +3542,35 @@ def play_audio(conversion_id, filename):
         audio_path = os.path.join(app.config['AUDIO_FOLDER'], safe_conversion, safe_name)
         if not os.path.exists(audio_path):
             audio_path = os.path.join(app.config['AUDIO_FOLDER'], safe_name)
+        if not os.path.exists(audio_path):
+            saved = _db_get_conversion(conversion_id) or {}
+            page = _db_get_page_by_filename(conversion_id, safe_name) or {}
+            text = (page.get('text') or '').strip()
+            options = saved.get('options') if isinstance(saved.get('options'), dict) else {}
+            if text:
+                out_dir = os.path.join(app.config['AUDIO_FOLDER'], safe_conversion)
+                out_path = os.path.join(out_dir, safe_name)
+                res = tts_to_file_with_alignment(
+                    text,
+                    out_path,
+                    lang=str(options.get('lang') or 'pt'),
+                    speed=float(options.get('speed') or 1.0),
+                    voice_type=str(options.get('voice_type') or 'default'),
+                    enhanced_voice=str(options.get('enhanced_voice') or 'default'),
+                    tts_engine=str(options.get('tts_engine') or 'gtts'),
+                    tts_voice=(options.get('tts_voice') or None),
+                    sapi_voice=str(options.get('sapi_voice') or ''),
+                    use_offline=bool(options.get('use_offline', False)),
+                    normalize_audio=bool(options.get('normalize_audio', False)),
+                    trim_silence=bool(options.get('trim_silence', False))
+                )
+                audio_path = res.get('path') or audio_path
+                if audio_path and os.path.exists(audio_path):
+                    try:
+                        _db_update_page_full_path(conversion_id, safe_name, audio_path)
+                    except Exception:
+                        pass
+
         if os.path.exists(audio_path):
             resp = send_file(audio_path, conditional=False)
             resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
