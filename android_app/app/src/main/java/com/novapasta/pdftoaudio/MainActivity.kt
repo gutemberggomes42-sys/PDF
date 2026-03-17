@@ -20,6 +20,7 @@ import androidx.appcompat.app.AppCompatActivity
 class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
+    private val defaultBaseUrl = "https://nova-pasta-production-b55e.up.railway.app/"
 
     private val pickFiles = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         val callback = filePathCallback
@@ -81,10 +82,8 @@ class MainActivity : AppCompatActivity() {
         val key = "base_url"
         val baseUrl = prefs.getString(key, null)
         if (baseUrl.isNullOrBlank()) {
-            promptBaseUrl { url ->
-                prefs.edit().putString(key, url).apply()
-                webView.loadUrl(url)
-            }
+            prefs.edit().putString(key, defaultBaseUrl).apply()
+            webView.loadUrl(defaultBaseUrl)
         } else {
             webView.loadUrl(baseUrl)
         }
@@ -101,12 +100,12 @@ class MainActivity : AppCompatActivity() {
     private fun promptBaseUrl(onSaved: (String) -> Unit) {
         val prefs = getSharedPreferences("pdf_to_audio", MODE_PRIVATE)
         val key = "base_url"
-        val current = prefs.getString(key, "http://10.0.2.2:5000/") ?: "http://10.0.2.2:5000/"
+        val current = prefs.getString(key, defaultBaseUrl) ?: defaultBaseUrl
         val input = android.widget.EditText(this)
         input.setText(current)
         AlertDialog.Builder(this)
             .setTitle("Servidor")
-            .setMessage("Informe a URL do servidor (ex: http://SEU_IP:5000/)")
+            .setMessage("URL do servidor (ex: https://SEU_DOMINIO/ ou http://SEU_IP:5000/)")
             .setView(input)
             .setPositiveButton("Salvar") { _, _ ->
                 var url = input.text.toString().trim()

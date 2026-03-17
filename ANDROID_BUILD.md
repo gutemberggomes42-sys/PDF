@@ -16,12 +16,12 @@ Este repositório já inclui um app Android em [android_app](file:///c:/Users/gu
 
 ## 2) Configurar a URL do servidor dentro do app
 
-O app pergunta a URL do servidor no primeiro acesso.
+Por padrão o app abre o servidor em produção (Railway).
+
+Para trocar, no app, pressione e segure (toque longo) e informe a URL desejada.
 
 - Emulador Android: `http://10.0.2.2:5000/`
 - Celular na mesma rede (servidor no PC): `http://SEU_IP:5000/` (ex.: `http://192.168.0.10:5000/`)
-
-Dica: no app, pressione e segure (toque longo) para trocar a URL a qualquer momento.
 
 ## 3) Gerar APK (para instalar e testar)
 
@@ -32,6 +32,13 @@ No Android Studio:
 O APK gerado fica em:
 
 - `android_app/app/build/outputs/apk/debug/app-debug.apk` (debug)
+
+## 3.1) Build automático (GitHub Actions)
+
+Se você preferir gerar o APK sem abrir Android Studio:
+
+- Actions → workflow “Android Debug APK” → Run workflow
+- Baixe o artifact “app-debug-apk”
 
 ## 4) Gerar AAB (para Play Store)
 
