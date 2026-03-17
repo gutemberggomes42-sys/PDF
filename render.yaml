@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: nova-pasta
+    env: docker
+    healthCheckPath: /
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 10
+    envVars:
+      - key: REQUIRE_AUTH
+        value: "0"
+      - key: DB_PATH
+        value: /data/app_data.db
+      - key: UPLOAD_FOLDER
+        value: /data/uploads
+      - key: AUDIO_FOLDER
+        value: /data/audio
+      - key: CACHE_FOLDER
+        value: /data/cache

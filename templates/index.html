@@ -1,0 +1,3052 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>PDF para Áudio Avançado v3.0 - Enterprise Edition</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .upload-area {
+            border: 3px dashed #cbd5e0;
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover {
+            border-color: #667eea;
+            background-color: #f7fafc;
+        }
+        .upload-area.dragover {
+            border-color: #667eea;
+            background-color: #edf2f7;
+        }
+        .progress-bar {
+            transition: width 0.3s ease;
+        }
+        .audio-player {
+            background: linear-gradient(135deg, #f6f8fb 0%, #e9ecef 100%);
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .processing {
+            animation: pulse 2s infinite;
+        }
+        .track-active {
+            border: 2px solid #8b5cf6;
+            background-color: #f5f3ff;
+        }
+        .seg-active {
+            background-color: #fde68a;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="authModal" class="fixed inset-0 hidden items-center justify-center bg-black bg-opacity-50 z-50">
+        <div class="bg-white rounded-xl shadow-lg p-8 w-full max-w-md">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-2">Entrar</h2>
+            <p class="text-sm text-gray-600 mb-6">Faça login com Google para usar o aplicativo.</p>
+            <button id="googleLoginBtn" class="w-full bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 transition duration-300">
+                <i class="fab fa-google mr-2"></i>
+                Continuar com Google
+            </button>
+            <p id="authError" class="mt-4 text-sm text-red-600 hidden"></p>
+        </div>
+    </div>
+    <div id="demoModal" class="fixed inset-0 hidden items-center justify-center bg-black bg-opacity-50 z-50">
+        <div class="bg-white rounded-xl shadow-lg p-6 w-full max-w-2xl" style="max-height: 90vh;">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-semibold text-gray-800">Teste sem login</h2>
+                <button id="demoCloseBtn" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                <select id="demoLang" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700">
+                    <option value="pt" selected>Português</option>
+                    <option value="en">English</option>
+                    <option value="es">Español</option>
+                    <option value="fr">Français</option>
+                    <option value="de">Deutsch</option>
+                    <option value="it">Italiano</option>
+                </select>
+                <select id="demoEngine" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700">
+                    <option value="gtts" selected>Google gTTS (rápido)</option>
+                    <option value="edge">Microsoft Edge (mais natural)</option>
+                </select>
+                <select id="demoVoice" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700">
+                    <option value="" selected>Voz padrão</option>
+                </select>
+            </div>
+            <textarea id="demoText" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800" rows="6" placeholder="Cole um trecho aqui (até ~1.200 caracteres)"></textarea>
+            <div id="demoHint" class="text-xs text-gray-500 mt-2">Dica: use 2–3 parágrafos para sentir a entonação.</div>
+            <div id="demoError" class="hidden text-sm text-red-600 mt-3"></div>
+            <div class="mt-4 flex flex-wrap items-center gap-2 justify-between">
+                <div class="text-xs text-gray-500">Geramos uma amostra curta. Para converter livros, faça login.</div>
+                <button id="demoGenerateBtn" class="bg-purple-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-purple-700 transition">
+                    <i class="fas fa-wand-magic-sparkles mr-2"></i>Gerar amostra
+                </button>
+            </div>
+            <div id="demoAudioWrap" class="hidden mt-4">
+                <audio id="demoAudio" controls class="w-full audio-player rounded"></audio>
+            </div>
+        </div>
+    </div>
+    <div id="shareModal" class="fixed inset-0 hidden items-center justify-center bg-black bg-opacity-50 z-50">
+        <div class="bg-white rounded-xl shadow-lg p-6 w-full max-w-xl" style="max-height: 90vh;">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-semibold text-gray-800">Compartilhar</h2>
+                <button id="shareCloseBtn" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div id="shareError" class="hidden text-sm text-red-600 mb-3"></div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                <select id="shareExpiresDays" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700">
+                    <option value="0" selected>Sem expiração</option>
+                    <option value="7">Expira em 7 dias</option>
+                    <option value="30">Expira em 30 dias</option>
+                    <option value="90">Expira em 90 dias</option>
+                </select>
+                <div class="flex gap-2">
+                    <button id="shareCreateBtn" class="flex-1 bg-purple-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-purple-700 transition">Gerar link</button>
+                    <button id="shareRevokeBtn" class="flex-1 bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 transition">Revogar</button>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <input id="shareLinkInput" readonly class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-800 bg-gray-50">
+                <button id="shareCopyBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition">
+                    <i class="fas fa-copy mr-2"></i>Copiar
+                </button>
+            </div>
+            <div id="shareMeta" class="mt-3 text-xs text-gray-500"></div>
+            <div class="mt-4 text-xs text-gray-500">Dica: compartilhe com amigos. Quem abrir o link pode ouvir e baixar o ZIP.</div>
+        </div>
+    </div>
+    <div id="libraryModal" class="fixed inset-0 hidden items-center justify-center bg-black bg-opacity-50 z-50">
+        <div class="bg-white rounded-xl shadow-lg w-full max-w-3xl overflow-hidden" style="max-height: 85vh;">
+            <div class="flex items-center justify-between px-6 py-4 border-b">
+                <h2 class="text-xl font-semibold text-gray-800">Meus Áudios</h2>
+                <button id="closeLibraryBtn" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="px-6 py-4 overflow-y-auto" style="max-height: calc(85vh - 72px); -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y;">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                    <input id="librarySearch" type="text" placeholder="Buscar..." class="sm:col-span-2 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                    <select id="libraryStatusFilter" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700">
+                        <option value="all" selected>Todos</option>
+                        <option value="completed">Concluídos</option>
+                        <option value="processing">Processando</option>
+                        <option value="error">Erro</option>
+                    </select>
+                </div>
+                <div id="libraryLoading" class="text-sm text-gray-600">
+                    <i class="fas fa-spinner fa-spin mr-2"></i>Carregando...
+                </div>
+                <div id="libraryError" class="hidden text-sm text-red-600"></div>
+                <div id="libraryList" class="space-y-3"></div>
+                <div id="libraryDetails" class="hidden mt-6 border-t pt-4"></div>
+            </div>
+        </div>
+    </div>
+    <div id="chaptersModal" class="fixed inset-0 hidden items-center justify-center bg-black bg-opacity-50 z-50">
+        <div class="bg-white rounded-xl shadow-lg p-6 w-full max-w-2xl" style="max-height: 85vh;">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-semibold text-gray-800">Editar capítulos</h2>
+                <button id="chaptersCloseBtn" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div id="chaptersError" class="hidden text-sm text-red-600 mb-3"></div>
+            <div id="chaptersList" class="space-y-3 overflow-y-auto" style="max-height: calc(85vh - 140px);"></div>
+            <div class="mt-5 flex items-center justify-end space-x-2">
+                <button id="chaptersSaveBtn" class="bg-purple-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-purple-700 transition">Salvar</button>
+            </div>
+        </div>
+    </div>
+    <header class="gradient-bg text-white shadow-lg">
+        <div class="container mx-auto px-4 py-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-book-open text-3xl"></i>
+                    <h1 class="text-2xl font-bold">PDF para Áudio</h1>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <div class="hidden sm:flex items-center space-x-3">
+                        <span id="userLabel" class="text-sm opacity-90"></span>
+                        <button id="logoutBtn" class="hidden bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">
+                            <i class="fas fa-sign-out-alt mr-2"></i>
+                            Sair
+                        </button>
+                    </div>
+                    <p class="text-sm opacity-90 hidden sm:block">Transforme seus livros em audiolivros</p>
+                    <button id="openDemoBtn" class="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">
+                        <i class="fas fa-bolt mr-2"></i>
+                        Teste grátis
+                    </button>
+                    <button id="openLibraryBtn" class="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">
+                        <i class="fas fa-folder-open mr-2"></i>
+                        Meus Áudios
+                    </button>
+                    <button id="clearCacheBtn" class="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">
+                        <i class="fas fa-broom mr-2"></i>
+                        Limpar Cache
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+        <div class="max-w-4xl mx-auto">
+            <section class="mb-8">
+                <div class="bg-white rounded-xl shadow-lg p-8">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                        <div>
+                            <h2 class="text-3xl font-extrabold text-gray-900 leading-tight">Transforme qualquer PDF em audiolivro em minutos</h2>
+                            <p class="text-gray-600 mt-3">Upload resumível, capítulos, vozes naturais e retomada automática. Feito para estudar, trabalhar e ouvir em qualquer lugar.</p>
+                            <div class="mt-5 flex flex-wrap gap-2">
+                                <button id="heroDemoBtn" class="bg-purple-600 text-white px-5 py-3 rounded-lg font-semibold hover:bg-purple-700 transition">
+                                    <i class="fas fa-play mr-2"></i>Ouvir amostra
+                                </button>
+                                <a href="#upload" class="bg-gray-100 text-gray-800 px-5 py-3 rounded-lg font-semibold hover:bg-gray-200 transition">
+                                    <i class="fas fa-upload mr-2"></i>Converter agora
+                                </a>
+                            </div>
+                            <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                                <div class="bg-purple-50 text-purple-900 rounded-lg p-3"><i class="fas fa-cloud-upload-alt mr-2"></i>Upload resumível</div>
+                                <div class="bg-purple-50 text-purple-900 rounded-lg p-3"><i class="fas fa-heading mr-2"></i>Capítulos editáveis</div>
+                                <div class="bg-purple-50 text-purple-900 rounded-lg p-3"><i class="fas fa-microphone-alt mr-2"></i>Vozes reais</div>
+                            </div>
+                        </div>
+                        <div class="bg-gradient-to-br from-purple-50 to-white rounded-xl p-6 border">
+                            <div class="text-sm font-semibold text-gray-800 mb-2">Como funciona</div>
+                            <ol class="space-y-2 text-sm text-gray-700">
+                                <li class="flex items-start"><span class="w-6 h-6 rounded-full bg-purple-600 text-white flex items-center justify-center mr-2">1</span>Envie PDF, DOCX ou TXT</li>
+                                <li class="flex items-start"><span class="w-6 h-6 rounded-full bg-purple-600 text-white flex items-center justify-center mr-2">2</span>Escolha a voz e a divisão</li>
+                                <li class="flex items-start"><span class="w-6 h-6 rounded-full bg-purple-600 text-white flex items-center justify-center mr-2">3</span>Baixe por capítulo ou tudo em ZIP</li>
+                            </ol>
+                            <div class="mt-4 text-xs text-gray-500">Dica: use “Microsoft Edge” para melhor naturalidade e sincronização do texto.</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <!-- Upload Section -->
+            <section id="upload" class="bg-white rounded-xl shadow-lg p-8 mb-8">
+                <h2 class="text-2xl font-semibold mb-6 text-gray-800">
+                    <i class="fas fa-upload mr-2 text-purple-600"></i>
+                    Enviar Arquivo
+                </h2>
+                
+                <!-- Conversion Options -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Idioma</label>
+                        <select id="languageSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                            <option value="pt">Português</option>
+                            <option value="en">English</option>
+                            <option value="es">Español</option>
+                            <option value="fr">Français</option>
+                            <option value="de">Deutsch</option>
+                            <option value="it">Italiano</option>
+                            <option value="ru">Русский</option>
+                            <option value="ja">日本語</option>
+                            <option value="zh">中文</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Velocidade</label>
+                        <div class="flex items-center space-x-2">
+                            <input type="range" id="speedSlider" min="0.5" max="2.0" step="0.1" value="1.0" class="flex-1">
+                            <span id="speedValue" class="text-sm font-medium text-gray-700 w-12">1.0x</span>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-list-ol mr-2"></i>Separar Por
+                        </label>
+                        <select id="splitModeSelect" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700">
+                            <option value="chapter" selected>Capítulo (recomendado)</option>
+                            <option value="page">Página</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-sliders-h mr-2"></i>Qualidade do Áudio
+                        </label>
+                        <div class="space-y-2">
+                            <label class="flex items-center space-x-2 text-sm text-gray-700">
+                                <input id="normalizeToggle" type="checkbox" class="h-4 w-4">
+                                <span>Normalizar volume</span>
+                            </label>
+                            <label class="flex items-center space-x-2 text-sm text-gray-700">
+                                <input id="trimSilenceToggle" type="checkbox" class="h-4 w-4">
+                                <span>Remover silêncio no começo/fim</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-microphone-alt mr-2"></i>Tipo de Voz
+                        </label>
+                        <select id="voiceSelect" name="voice_type" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700">
+                            <option value="default">Padrão</option>
+                            <option value="female">Feminina</option>
+                            <option value="male">Masculina</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-6" id="enhancedVoiceSection">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-magic mr-2"></i>Voz Ultra-Natural (IA)
+                        </label>
+                        <select id="enhancedVoiceSelect" name="enhanced_voice" class="w-full px-4 py-3 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700 bg-purple-50">
+                            <option value="default">Padrão (GTTS)</option>
+                        </select>
+                        <div id="enhancedVoiceStatus" class="mt-2 text-sm text-gray-600">
+                            <i class="fas fa-spinner fa-spin mr-1"></i>Carregando vozes...
+                        </div>
+                    </div>
+
+                    <div class="mb-6 hidden" id="edgeVoiceSection">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-user-voice mr-2"></i>Voz Real (Microsoft Edge)
+                        </label>
+                        <select id="ttsEngineSelect" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700">
+                            <option value="gtts">Padrão (Google gTTS)</option>
+                            <option value="edge">Microsoft Edge TTS (real)</option>
+                        </select>
+                        <select id="ttsVoiceSelect" class="mt-3 w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700 hidden">
+                            <option value="">Selecione uma voz</option>
+                        </select>
+                        <div id="edgeVoiceStatus" class="mt-2 text-sm text-gray-600"></div>
+                    </div>
+
+                    <div class="mb-6 hidden" id="offlineVoiceSection">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-desktop mr-2"></i>Modo Offline (Windows SAPI)
+                        </label>
+                        <div class="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+                            <div class="text-sm text-gray-700">
+                                Usar vozes instaladas no Windows
+                            </div>
+                            <label class="inline-flex items-center cursor-pointer">
+                                <input id="offlineToggle" type="checkbox" class="h-5 w-5 text-purple-600">
+                            </label>
+                        </div>
+                        <select id="sapiVoiceSelect" class="mt-3 w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700 hidden">
+                            <option value="">Selecionar voz do Windows (opcional)</option>
+                        </select>
+                        <div id="offlineVoiceStatus" class="mt-2 text-sm text-gray-600"></div>
+                    </div>
+                </div>
+                
+                <div id="uploadArea" class="upload-area rounded-lg p-12 text-center cursor-pointer">
+                    <i class="fas fa-cloud-upload-alt text-6xl text-gray-400 mb-4"></i>
+                    <p class="text-lg text-gray-600 mb-2">Arraste seu arquivo aqui ou clique para selecionar</p>
+                    <p class="text-sm text-gray-500">Formatos: PDF, DOCX, TXT (Tamanho máximo: 50MB)</p>
+                    <input type="file" id="fileInput" accept=".pdf,.docx,.txt" class="hidden">
+                </div>
+
+                <div id="fileInfo" class="hidden mt-4 p-4 bg-blue-50 rounded-lg">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <i id="fileIcon" class="fas fa-file-pdf text-red-500 text-2xl"></i>
+                            <div>
+                                <p class="font-semibold text-gray-800" id="fileName"></p>
+                                <p class="text-sm text-gray-600" id="fileSize"></p>
+                            </div>
+                        </div>
+                        <button id="removeFile" class="text-red-500 hover:text-red-700">
+                            <i class="fas fa-times-circle text-xl"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <button id="convertBtn" class="hidden w-full mt-6 bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 transition duration-300">
+                    <i class="fas fa-magic mr-2"></i>
+                    Converter para Áudio
+                </button>
+            </section>
+
+            <!-- Progress Section -->
+            <section id="progressSection" class="hidden bg-white rounded-xl shadow-lg p-8 mb-8">
+                <h2 class="text-2xl font-semibold mb-6 text-gray-800">
+                    <i class="fas fa-cog mr-2 text-purple-600 processing"></i>
+                    Processando...
+                </h2>
+                
+                <div class="mb-4">
+                    <div class="flex justify-between text-sm text-gray-600 mb-2">
+                        <span id="progressMessage">Iniciando processamento...</span>
+                        <span id="progressPercent">0%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-3">
+                        <div id="progressBar" class="progress-bar bg-purple-600 h-3 rounded-full" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <div id="processingDetails" class="text-sm text-gray-600">
+                    <p><i class="fas fa-info-circle mr-2"></i>Isso pode levar alguns minutos, dependendo do tamanho do arquivo.</p>
+                </div>
+                <div class="mt-4 flex flex-wrap gap-2">
+                    <button id="resumeUploadBtn" class="hidden bg-purple-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-purple-700 transition">
+                        <i class="fas fa-upload mr-2"></i>Retomar envio
+                    </button>
+                    <button id="pauseBtn" class="bg-yellow-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-yellow-600 transition">
+                        <i class="fas fa-pause mr-2"></i>Pausar
+                    </button>
+                    <button id="resumeBtn" class="hidden bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition">
+                        <i class="fas fa-play mr-2"></i>Retomar
+                    </button>
+                    <button id="cancelBtn" class="bg-red-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-700 transition">
+                        <i class="fas fa-times mr-2"></i>Cancelar
+                    </button>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section id="resultsSection" class="hidden bg-white rounded-xl shadow-lg p-8">
+                <h2 class="text-2xl font-semibold mb-6 text-gray-800">
+                    <i class="fas fa-check-circle mr-2 text-green-600"></i>
+                    Conversão Concluída!
+                </h2>
+
+                <!-- Playlist Player -->
+                <div id="playlistPlayer" class="mb-6 p-4 bg-purple-50 rounded-lg">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-semibold text-gray-800">
+                            <i class="fas fa-play-circle mr-2 text-purple-600"></i>
+                            Player Contínuo
+                        </h3>
+                        <div id="splitModeInfo" class="text-xs text-gray-600"></div>
+                        <div class="flex items-center space-x-2">
+                            <button id="playAllBtn" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition">
+                                <i class="fas fa-play mr-2"></i>
+                                Play All
+                            </button>
+                            <button id="stopAllBtn" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition">
+                                <i class="fas fa-stop mr-2"></i>
+                                Stop
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <div class="flex items-center justify-between text-sm text-gray-600 mb-2">
+                            <span id="currentTrack">Nenhuma faixa tocando</span>
+                            <span id="trackProgress">0/0</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div id="playlistProgressBar" class="bg-purple-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    
+                    <audio id="mainAudioPlayer" controls class="w-full"></audio>
+
+                    <div id="followTextPanel" class="mt-4 bg-white border border-purple-200 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="text-sm font-semibold text-gray-800">
+                                <i class="fas fa-book-reader mr-2 text-purple-600"></i>
+                                <span id="followTextTitle">Texto</span>
+                            </div>
+                            <button id="toggleFollowText" class="text-sm text-purple-700 hover:text-purple-900">Ocultar</button>
+                        </div>
+                        <div id="followTextStatus" class="text-xs text-gray-500 mb-2"></div>
+                        <div id="followTextBody" class="text-sm text-gray-800 whitespace-pre-wrap max-h-64 overflow-auto leading-6"></div>
+                    </div>
+                </div>
+
+                <div id="audioFilesList" class="space-y-4">
+                    <!-- Audio files will be listed here -->
+                </div>
+
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    <button id="downloadAllBtn" class="bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition duration-300">
+                        <i class="fas fa-download mr-2"></i>
+                        Baixar Todos
+                    </button>
+                    <button id="mergeAudioBtn" class="bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 transition duration-300">
+                        <i class="fas fa-compress-alt mr-2"></i>
+                        Juntar Áudios
+                    </button>
+                    <button id="downloadMergedBtn" class="bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition duration-300 hidden">
+                        <i class="fas fa-file-audio mr-2"></i>
+                        Baixar Mesclado
+                    </button>
+                    <button id="downloadM4bBtn" class="bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 transition duration-300 hidden">
+                        <i class="fas fa-headphones mr-2"></i>
+                        Baixar M4B
+                    </button>
+                    <button id="shareBtn" class="bg-yellow-500 text-white py-3 rounded-lg font-semibold hover:bg-yellow-600 transition duration-300 hidden">
+                        <i class="fas fa-share-alt mr-2"></i>
+                        Compartilhar
+                    </button>
+                    <button id="editChaptersBtn" class="bg-purple-100 text-purple-800 py-3 rounded-lg font-semibold hover:bg-purple-200 transition duration-300 hidden">
+                        <i class="fas fa-pen mr-2"></i>
+                        Editar capítulos
+                    </button>
+                    <button id="newConversionBtn" class="bg-gray-600 text-white py-3 rounded-lg font-semibold hover:bg-gray-700 transition duration-300">
+                        <i class="fas fa-plus mr-2"></i>
+                        Nova Conversão
+                    </button>
+                </div>
+            </section>
+
+            <!-- Error Section -->
+            <section id="errorSection" class="hidden bg-white rounded-xl shadow-lg p-8">
+                <div class="text-center">
+                    <i class="fas fa-exclamation-triangle text-6xl text-red-500 mb-4"></i>
+                    <h2 class="text-2xl font-semibold mb-4 text-gray-800">Ocorreu um Erro</h2>
+                    <p id="errorMessage" class="text-gray-600 mb-6"></p>
+                    <button id="retryBtn" class="bg-purple-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-purple-700 transition duration-300">
+                        <i class="fas fa-redo mr-2"></i>
+                        Tentar Novamente
+                    </button>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <footer class="bg-gray-800 text-white py-6 mt-12">
+        <div class="container mx-auto px-4 text-center">
+            <p class="text-sm opacity-75">© 2024 PDF para Áudio. Transforme seus livros em experiências auditivas.</p>
+        </div>
+    </footer>
+
+    <script>
+        let currentConversionId = null;
+        let statusCheckInterval = null;
+        let statusNotFoundCount = 0;
+        let statusNetworkErrorCount = 0;
+        let playlist = [];
+        let currentTrackIndex = 0;
+        let isPlaying = false;
+        let authToken = null;
+        let authReady = false;
+        let showLoginTimer = null;
+        let libraryPlaylist = [];
+        let libraryCurrentIndex = 0;
+        let libraryAudioEl = null;
+        let libraryNowEl = null;
+        let libraryPlayBtnEl = null;
+        let libraryConversionId = null;
+        const ACTIVE_CONVERSION_KEY = 'activeConversionId';
+        const ACTIVE_CONVERSION_META_KEY = 'activeConversionMeta';
+        let restoreInProgress = false;
+
+        function saveActiveConversionMeta(meta) {
+            try {
+                localStorage.setItem(ACTIVE_CONVERSION_META_KEY, JSON.stringify(meta || {}));
+            } catch (e) {
+            }
+        }
+
+        function getActiveConversionMeta() {
+            try {
+                const raw = localStorage.getItem(ACTIVE_CONVERSION_META_KEY);
+                if (!raw) return null;
+                return JSON.parse(raw);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function setActivePhase(phase, conversionId) {
+            const now = Date.now();
+            const meta = getActiveConversionMeta() || {};
+            if (!meta.startedAt) meta.startedAt = now;
+            meta.updatedAt = now;
+            meta.phase = phase || '';
+            if (conversionId) meta.conversionId = conversionId;
+            saveActiveConversionMeta(meta);
+        }
+
+        function playbackKey(conversionId, filename) {
+            return `playback:${conversionId || ''}:${filename || ''}`;
+        }
+
+        function savePlaybackPos(conversionId, filename, seconds) {
+            try {
+                const k = playbackKey(conversionId, filename);
+                if (!k) return;
+                localStorage.setItem(k, String(seconds || 0));
+            } catch (e) {
+            }
+        }
+
+        function loadPlaybackPos(conversionId, filename) {
+            try {
+                const k = playbackKey(conversionId, filename);
+                const v = localStorage.getItem(k);
+                const n = parseFloat(v || '0');
+                return isFinite(n) && n > 0 ? n : 0;
+            } catch (e) {
+                return 0;
+            }
+        }
+
+        let resumeUploadConversionId = null;
+        let resumeUploadMode = false;
+
+        async function uploadFileInChunks(file, conversionId) {
+            const chunkSize = 2 * 1024 * 1024;
+            let received = 0;
+            try {
+                const st = await apiFetch(`/api/upload/status/${conversionId}`);
+                if (st.ok) {
+                    const j = await st.json().catch(() => ({}));
+                    received = parseInt(j.received_size || '0', 10) || 0;
+                }
+            } catch (e) {
+            }
+
+            while (received < file.size) {
+                const next = Math.min(file.size, received + chunkSize);
+                const blob = file.slice(received, next);
+                const resp = await apiFetch(`/api/upload/chunk/${conversionId}?offset=${received}&total=${file.size}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/octet-stream' },
+                    body: blob
+                });
+                if (resp.status === 409) {
+                    const j = await resp.json().catch(() => ({}));
+                    received = parseInt(j.received_size || '0', 10) || received;
+                    continue;
+                }
+                if (!resp.ok) {
+                    const j = await resp.json().catch(() => ({}));
+                    throw new Error(j.error || 'Erro ao enviar parte do arquivo');
+                }
+                const j = await resp.json().catch(() => ({}));
+                received = parseInt(j.received_size || String(next), 10) || next;
+                const pct = Math.max(0, Math.min(99, Math.floor((received / file.size) * 100)));
+                const msg = document.getElementById('progressMessage');
+                const p = document.getElementById('progressPercent');
+                const bar = document.getElementById('progressBar');
+                if (msg) msg.textContent = `Enviando arquivo... ${pct}%`;
+                if (p) p.textContent = `${pct}%`;
+                if (bar) bar.style.width = `${pct}%`;
+                setActivePhase('uploading', conversionId);
+            }
+        }
+
+        async function resumeUploadWithFile(file) {
+            const conversionId = resumeUploadConversionId;
+            if (!conversionId) return;
+            const ext = (file.name.split('.').pop() || '').toLowerCase();
+            if (!['pdf', 'docx', 'txt'].includes(ext)) {
+                showError('Por favor, selecione um arquivo PDF, DOCX ou TXT.');
+                return;
+            }
+            if (file.size > 50 * 1024 * 1024) {
+                showError('O arquivo é muito grande. Tamanho máximo: 50MB.');
+                return;
+            }
+            try {
+                const st = await apiFetch(`/api/upload/status/${conversionId}`);
+                const j = await st.json().catch(() => ({}));
+                if (!st.ok) throw new Error(j.error || 'Erro ao verificar upload');
+                const total = parseInt(j.total_size || '0', 10) || 0;
+                if (total && total !== file.size) {
+                    throw new Error('Arquivo diferente do original. Selecione o mesmo arquivo para retomar.');
+                }
+                currentConversionId = conversionId;
+                saveActiveConversion(currentConversionId);
+                setActivePhase('uploading', currentConversionId);
+                showProgress();
+                if (resumeUploadBtn) resumeUploadBtn.classList.add('hidden');
+                await uploadFileInChunks(file, conversionId);
+                const done = await apiFetch(`/api/upload/complete/${conversionId}`, { method: 'POST' });
+                const dj = await done.json().catch(() => ({}));
+                if (!done.ok) throw new Error(dj.error || 'Erro ao finalizar upload');
+                setActivePhase('processing', conversionId);
+                if (resumeUploadBtn) resumeUploadBtn.classList.add('hidden');
+                startStatusCheck();
+            } catch (e) {
+                showError(e.message || 'Erro ao retomar upload');
+            } finally {
+                resumeUploadMode = false;
+            }
+        }
+
+        function saveActiveConversion(conversionId) {
+            try {
+                if (conversionId) {
+                    localStorage.setItem(ACTIVE_CONVERSION_KEY, conversionId);
+                    setActivePhase((getActiveConversionMeta() || {}).phase || 'processing', conversionId);
+                }
+            } catch (e) {
+            }
+        }
+
+        function clearActiveConversion() {
+            try {
+                localStorage.removeItem(ACTIVE_CONVERSION_KEY);
+                localStorage.removeItem(ACTIVE_CONVERSION_META_KEY);
+            } catch (e) {
+            }
+        }
+
+        function getActiveConversion() {
+            try {
+                return localStorage.getItem(ACTIVE_CONVERSION_KEY);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function restoreActiveConversion() {
+            if (restoreInProgress) return;
+            const conversionId = getActiveConversion();
+            if (!conversionId) return;
+            if (!authToken) return;
+            restoreInProgress = true;
+            try {
+                currentConversionId = conversionId;
+                showProgress();
+                const resp = await apiFetch(`/status/${conversionId}`);
+                if (!resp.ok) {
+                    if (resp.status === 404) {
+                        const meta = getActiveConversionMeta() || {};
+                        const startedAt = typeof meta.startedAt === 'number' ? meta.startedAt : 0;
+                        const ageMs = startedAt ? (Date.now() - startedAt) : 0;
+                        if (!ageMs || ageMs < 15 * 60 * 1000) {
+                            const msg = document.getElementById('progressMessage');
+                            if (msg) msg.textContent = 'Aguardando início da conversão...';
+                            startStatusCheck();
+                            return;
+                        }
+                    }
+                    clearActiveConversion();
+                    return;
+                }
+                const status = await resp.json().catch(() => null);
+                if (!status) {
+                    clearActiveConversion();
+                    return;
+                }
+                if (status.status === 'completed') {
+                    showResults(status);
+                } else if (status.status === 'error') {
+                    showError(status.message || 'Erro no processamento.');
+                } else if (status.status === 'uploading') {
+                    updateProgress(status);
+                    resumeUploadConversionId = conversionId;
+                    if (resumeUploadBtn) resumeUploadBtn.classList.remove('hidden');
+                    if (pauseBtn) pauseBtn.classList.add('hidden');
+                    if (resumeBtn) resumeBtn.classList.add('hidden');
+                    startStatusCheck();
+                } else if (status.status === 'paused') {
+                    updateProgress(status);
+                    if (pauseBtn) pauseBtn.classList.add('hidden');
+                    if (resumeBtn) resumeBtn.classList.remove('hidden');
+                } else {
+                    updateProgress(status);
+                    startStatusCheck();
+                }
+            } finally {
+                restoreInProgress = false;
+            }
+        }
+
+        window.addEventListener('beforeunload', (e) => {
+            const meta = getActiveConversionMeta();
+            const phase = meta && meta.phase ? String(meta.phase) : '';
+            if (phase === 'uploading' || phase === 'processing' || phase === 'paused') {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
+
+        // DOM elements
+        const authModal = document.getElementById('authModal');
+        const googleLoginBtn = document.getElementById('googleLoginBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const userLabel = document.getElementById('userLabel');
+        const authError = document.getElementById('authError');
+        const libraryModal = document.getElementById('libraryModal');
+        const openLibraryBtn = document.getElementById('openLibraryBtn');
+        const closeLibraryBtn = document.getElementById('closeLibraryBtn');
+        const libraryLoading = document.getElementById('libraryLoading');
+        const libraryError = document.getElementById('libraryError');
+        const libraryList = document.getElementById('libraryList');
+        const libraryDetails = document.getElementById('libraryDetails');
+        const librarySearch = document.getElementById('librarySearch');
+        const libraryStatusFilter = document.getElementById('libraryStatusFilter');
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+        const fileIcon = document.getElementById('fileIcon');
+        const removeFile = document.getElementById('removeFile');
+        const convertBtn = document.getElementById('convertBtn');
+        const progressSection = document.getElementById('progressSection');
+        const resultsSection = document.getElementById('resultsSection');
+        const errorSection = document.getElementById('errorSection');
+        
+        // New elements
+        const languageSelect = document.getElementById('languageSelect');
+        const speedSlider = document.getElementById('speedSlider');
+        const speedValue = document.getElementById('speedValue');
+        const voiceSelect = document.getElementById('voiceSelect');
+        const splitModeSelect = document.getElementById('splitModeSelect');
+        const normalizeToggle = document.getElementById('normalizeToggle');
+        const trimSilenceToggle = document.getElementById('trimSilenceToggle');
+        const enhancedVoiceSelect = document.getElementById('enhancedVoiceSelect');
+        const enhancedVoiceStatus = document.getElementById('enhancedVoiceStatus');
+        const edgeVoiceSection = document.getElementById('edgeVoiceSection');
+        const ttsEngineSelect = document.getElementById('ttsEngineSelect');
+        const ttsVoiceSelect = document.getElementById('ttsVoiceSelect');
+        const edgeVoiceStatus = document.getElementById('edgeVoiceStatus');
+        const offlineVoiceSection = document.getElementById('offlineVoiceSection');
+        const offlineToggle = document.getElementById('offlineToggle');
+        const sapiVoiceSelect = document.getElementById('sapiVoiceSelect');
+        const offlineVoiceStatus = document.getElementById('offlineVoiceStatus');
+        const mainAudioPlayer = document.getElementById('mainAudioPlayer');
+        const playAllBtn = document.getElementById('playAllBtn');
+        const stopAllBtn = document.getElementById('stopAllBtn');
+        const mergeAudioBtn = document.getElementById('mergeAudioBtn');
+        const downloadMergedBtn = document.getElementById('downloadMergedBtn');
+        const downloadM4bBtn = document.getElementById('downloadM4bBtn');
+        const followTextPanel = document.getElementById('followTextPanel');
+        const followTextTitle = document.getElementById('followTextTitle');
+        const followTextBody = document.getElementById('followTextBody');
+        const followTextStatus = document.getElementById('followTextStatus');
+        const toggleFollowText = document.getElementById('toggleFollowText');
+        const splitModeInfo = document.getElementById('splitModeInfo');
+        const clearCacheBtn = document.getElementById('clearCacheBtn');
+        const openDemoBtn = document.getElementById('openDemoBtn');
+        const heroDemoBtn = document.getElementById('heroDemoBtn');
+        const demoModal = document.getElementById('demoModal');
+        const demoCloseBtn = document.getElementById('demoCloseBtn');
+        const demoLang = document.getElementById('demoLang');
+        const demoEngine = document.getElementById('demoEngine');
+        const demoVoice = document.getElementById('demoVoice');
+        const demoText = document.getElementById('demoText');
+        const demoGenerateBtn = document.getElementById('demoGenerateBtn');
+        const demoAudioWrap = document.getElementById('demoAudioWrap');
+        const demoAudio = document.getElementById('demoAudio');
+        const demoError = document.getElementById('demoError');
+        const shareBtn = document.getElementById('shareBtn');
+        const shareModal = document.getElementById('shareModal');
+        const shareCloseBtn = document.getElementById('shareCloseBtn');
+        const shareError = document.getElementById('shareError');
+        const shareExpiresDays = document.getElementById('shareExpiresDays');
+        const shareCreateBtn = document.getElementById('shareCreateBtn');
+        const shareRevokeBtn = document.getElementById('shareRevokeBtn');
+        const shareLinkInput = document.getElementById('shareLinkInput');
+        const shareCopyBtn = document.getElementById('shareCopyBtn');
+        const shareMeta = document.getElementById('shareMeta');
+        const resumeUploadBtn = document.getElementById('resumeUploadBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const resumeBtn = document.getElementById('resumeBtn');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const editChaptersBtn = document.getElementById('editChaptersBtn');
+        const chaptersModal = document.getElementById('chaptersModal');
+        const chaptersCloseBtn = document.getElementById('chaptersCloseBtn');
+        const chaptersSaveBtn = document.getElementById('chaptersSaveBtn');
+        const chaptersList = document.getElementById('chaptersList');
+        const chaptersError = document.getElementById('chaptersError');
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCaxbSna7_7F5beEDanIMaHrVZ01DCBJsY",
+            authDomain: "conversao-de-livro-para-audio.firebaseapp.com",
+            projectId: "conversao-de-livro-para-audio",
+            storageBucket: "conversao-de-livro-para-audio.firebasestorage.app",
+            messagingSenderId: "682929738932",
+            appId: "1:682929738932:web:bb25b03944b74f26c333e1",
+            measurementId: "G-EWB05VZCJX"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const firebaseAuth = firebase.auth();
+        const googleProvider = new firebase.auth.GoogleAuthProvider();
+
+        function showAuthModal(message) {
+            authModal.classList.remove('hidden');
+            authModal.classList.add('flex');
+            if (message) {
+                authError.textContent = message;
+                authError.classList.remove('hidden');
+            } else {
+                authError.classList.add('hidden');
+            }
+        }
+
+        function hideAuthModal() {
+            authModal.classList.add('hidden');
+            authModal.classList.remove('flex');
+            authError.classList.add('hidden');
+        }
+
+        async function refreshToken(user) {
+            authToken = await user.getIdToken();
+        }
+
+        async function apiFetch(url, options = {}) {
+            if (!authToken && firebaseAuth.currentUser) {
+                try {
+                    authToken = await firebaseAuth.currentUser.getIdToken();
+                } catch (e) {
+                    authToken = null;
+                }
+            }
+            const headers = new Headers(options.headers || {});
+            if (authToken) {
+                headers.set('Authorization', `Bearer ${authToken}`);
+            }
+            const controller = new AbortController();
+            const timeoutMs = typeof options.timeoutMs === 'number' ? options.timeoutMs : 15000;
+            const t = setTimeout(() => controller.abort(), Math.max(1000, timeoutMs));
+            let resp;
+            try {
+                resp = await fetch(url, { cache: 'no-store', ...options, headers, signal: controller.signal });
+            } finally {
+                try { clearTimeout(t); } catch (e) {}
+            }
+            if (resp.status === 401 && firebaseAuth.currentUser) {
+                try {
+                    authToken = await firebaseAuth.currentUser.getIdToken(true);
+                    const headers2 = new Headers(options.headers || {});
+                    headers2.set('Authorization', `Bearer ${authToken}`);
+                    const controller2 = new AbortController();
+                    const t2 = setTimeout(() => controller2.abort(), Math.max(1000, timeoutMs));
+                    try {
+                        resp = await fetch(url, { cache: 'no-store', ...options, headers: headers2, signal: controller2.signal });
+                    } finally {
+                        try { clearTimeout(t2); } catch (e) {}
+                    }
+                } catch (e) {
+                    authToken = null;
+                }
+            }
+            if (resp.status === 401) {
+                showAuthModal('Faça login novamente para continuar.');
+            }
+            return resp;
+        }
+
+        async function checkFfmpegOrExplain() {
+            try {
+                const r = await fetch('/ffmpeg-status', { cache: 'no-store' });
+                const j = await r.json().catch(() => ({}));
+                if (j && j.available) return true;
+            } catch (e) {
+            }
+            alert('FFmpeg não está disponível. Mesclar MP3 precisa de FFmpeg. Se seus arquivos forem WAV, a mesclagem ainda pode funcionar.');
+            return true;
+        }
+
+        async function debugMerge(conversionId, label) {
+            try {
+                const r = await apiFetch(`/merge-audio/${conversionId}`);
+                const j = await r.json().catch(() => ({}));
+                if (!r.ok) {
+                    const msg = j && j.error ? j.error : 'Erro ao iniciar mesclagem';
+                    if (label) label.textContent = msg;
+                    alert(msg);
+                    return null;
+                }
+                return j;
+            } catch (e) {
+                const msg = e && e.message ? e.message : 'Erro ao iniciar mesclagem';
+                if (label) label.textContent = msg;
+                alert(msg);
+                return null;
+            }
+        }
+
+        googleLoginBtn.addEventListener('click', async () => {
+            try {
+                await firebaseAuth.signInWithRedirect(googleProvider);
+            } catch (e) {
+                const code = e && e.code ? e.code : '';
+                if (code === 'auth/unauthorized-domain') {
+                    showAuthModal('Domínio não autorizado no Firebase. Adicione localhost/127.0.0.1/IP em Authentication > Settings > Authorized domains.');
+                } else {
+                    showAuthModal('Erro ao iniciar login com Google.');
+                }
+            }
+        });
+
+        logoutBtn.addEventListener('click', async () => {
+            try {
+                await firebaseAuth.signOut();
+            } catch (e) {
+            }
+        });
+
+        firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
+        (async () => {
+            try {
+                await firebaseAuth.getRedirectResult();
+            } catch (e) {
+                const code = e && e.code ? e.code : '';
+                if (code === 'auth/unauthorized-domain') {
+                    showAuthModal('Domínio não autorizado no Firebase. Adicione localhost/127.0.0.1/IP em Authentication > Settings > Authorized domains.');
+                } else {
+                    showAuthModal('Falha ao finalizar login com Google.');
+                }
+            }
+        })();
+        firebaseAuth.onAuthStateChanged(async (user) => {
+            authReady = true;
+            if (!user) {
+                authToken = null;
+                logoutBtn.classList.add('hidden');
+                userLabel.textContent = '';
+                if (showLoginTimer) clearTimeout(showLoginTimer);
+                showLoginTimer = setTimeout(() => {
+                    if (!authToken) showAuthModal();
+                }, 250);
+                return;
+            }
+            if (showLoginTimer) clearTimeout(showLoginTimer);
+            try {
+                await refreshToken(user);
+            } catch (e) {
+                authToken = null;
+            }
+            logoutBtn.classList.remove('hidden');
+            userLabel.textContent = user.displayName ? `Olá, ${user.displayName}` : (user.email || '');
+            hideAuthModal();
+            try {
+                const ping = await apiFetch('/auth/me');
+                if (!ping.ok) {
+                    showAuthModal('Login ok, mas o servidor não aceitou o token. Verifique FIREBASE_PROJECT_ID/FIREBASE_WEB_API_KEY ou as credenciais do Firebase Admin.');
+                }
+            } catch (e) {
+            }
+            await restoreActiveConversion();
+        });
+
+        function showLibrary() {
+            libraryModal.classList.remove('hidden');
+            libraryModal.classList.add('flex');
+        }
+
+        function hideLibrary() {
+            libraryModal.classList.add('hidden');
+            libraryModal.classList.remove('flex');
+            libraryDetails.classList.add('hidden');
+            libraryDetails.innerHTML = '';
+            if (libraryAudioEl) {
+                try {
+                    libraryAudioEl.pause();
+                    libraryAudioEl.src = '';
+                    libraryAudioEl.load();
+                } catch (e) {
+                }
+            }
+            libraryPlaylist = [];
+            libraryCurrentIndex = 0;
+            libraryAudioEl = null;
+            libraryNowEl = null;
+            libraryPlayBtnEl = null;
+            libraryConversionId = null;
+        }
+
+        function showChaptersModal() {
+            if (!chaptersModal) return;
+            chaptersModal.classList.remove('hidden');
+            chaptersModal.classList.add('flex');
+        }
+
+        function hideChaptersModal() {
+            if (!chaptersModal) return;
+            chaptersModal.classList.add('hidden');
+            chaptersModal.classList.remove('flex');
+            if (chaptersError) {
+                chaptersError.classList.add('hidden');
+                chaptersError.textContent = '';
+            }
+            if (chaptersList) chaptersList.innerHTML = '';
+        }
+
+        function showDemoModal() {
+            if (!demoModal) return;
+            demoModal.classList.remove('hidden');
+            demoModal.classList.add('flex');
+            if (demoError) {
+                demoError.classList.add('hidden');
+                demoError.textContent = '';
+            }
+            if (demoAudioWrap) demoAudioWrap.classList.add('hidden');
+            if (demoAudio) {
+                try {
+                    demoAudio.pause();
+                    demoAudio.src = '';
+                    demoAudio.load();
+                } catch (e) {
+                }
+            }
+            if (demoText && !demoText.value) {
+                demoText.value = 'Hoje eu vou te mostrar como transformar um PDF em audiolivro em poucos minutos. Você pode ouvir enquanto caminha, dirige ou estuda.\n\nDepois, escolha uma voz mais natural e ajuste a velocidade para ficar perfeito.';
+            }
+            loadDemoVoices();
+        }
+
+        function hideDemoModal() {
+            if (!demoModal) return;
+            demoModal.classList.add('hidden');
+            demoModal.classList.remove('flex');
+        }
+
+        if (demoCloseBtn) demoCloseBtn.addEventListener('click', hideDemoModal);
+        if (demoModal) {
+            demoModal.addEventListener('click', (ev) => {
+                if (ev.target === demoModal) hideDemoModal();
+            });
+        }
+        if (openDemoBtn) openDemoBtn.addEventListener('click', showDemoModal);
+        if (heroDemoBtn) heroDemoBtn.addEventListener('click', showDemoModal);
+
+        function showShareModal() {
+            if (!shareModal) return;
+            shareModal.classList.remove('hidden');
+            shareModal.classList.add('flex');
+            if (shareError) {
+                shareError.classList.add('hidden');
+                shareError.textContent = '';
+            }
+            if (shareLinkInput) shareLinkInput.value = '';
+            if (shareMeta) shareMeta.textContent = '';
+        }
+
+        function hideShareModal() {
+            if (!shareModal) return;
+            shareModal.classList.add('hidden');
+            shareModal.classList.remove('flex');
+        }
+
+        if (shareCloseBtn) shareCloseBtn.addEventListener('click', hideShareModal);
+        if (shareModal) {
+            shareModal.addEventListener('click', (ev) => {
+                if (ev.target === shareModal) hideShareModal();
+            });
+        }
+
+        async function refreshShareInfo() {
+            if (!currentConversionId) return;
+            const r = await apiFetch(`/api/conversions/${currentConversionId}/share`);
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(j.error || 'Erro ao carregar compartilhamento');
+            if (shareLinkInput) shareLinkInput.value = j.share_url || '';
+            if (shareMeta) {
+                shareMeta.textContent = j.share_expires_at ? `Expira em: ${j.share_expires_at}` : (j.share_url ? 'Sem expiração' : 'Link ainda não gerado');
+            }
+            if (shareRevokeBtn) shareRevokeBtn.disabled = !j.share_url;
+            if (shareCopyBtn) shareCopyBtn.disabled = !j.share_url;
+        }
+
+        async function createShareLink() {
+            if (!currentConversionId) return;
+            if (shareError) {
+                shareError.classList.add('hidden');
+                shareError.textContent = '';
+            }
+            const days = shareExpiresDays ? parseInt(shareExpiresDays.value || '0', 10) : 0;
+            const r = await apiFetch(`/api/conversions/${currentConversionId}/share`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ expires_days: isFinite(days) ? days : 0 })
+            });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(j.error || 'Erro ao gerar link');
+            if (shareLinkInput) shareLinkInput.value = j.share_url || '';
+            if (shareMeta) shareMeta.textContent = j.share_expires_at ? `Expira em: ${j.share_expires_at}` : 'Sem expiração';
+            if (shareRevokeBtn) shareRevokeBtn.disabled = false;
+            if (shareCopyBtn) shareCopyBtn.disabled = false;
+        }
+
+        async function revokeShareLink() {
+            if (!currentConversionId) return;
+            const ok = confirm('Revogar o link compartilhável? Quem tiver o link não conseguirá mais acessar.');
+            if (!ok) return;
+            const r = await apiFetch(`/api/conversions/${currentConversionId}/share/revoke`, { method: 'POST' });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(j.error || 'Erro ao revogar link');
+            if (shareLinkInput) shareLinkInput.value = '';
+            if (shareMeta) shareMeta.textContent = 'Link revogado';
+            if (shareRevokeBtn) shareRevokeBtn.disabled = true;
+            if (shareCopyBtn) shareCopyBtn.disabled = true;
+        }
+
+        async function copyShareLink() {
+            const v = shareLinkInput ? (shareLinkInput.value || '').trim() : '';
+            if (!v) return;
+            try {
+                await navigator.clipboard.writeText(v);
+                if (shareMeta) shareMeta.textContent = 'Link copiado!';
+            } catch (e) {
+                try {
+                    if (shareLinkInput) shareLinkInput.select();
+                    document.execCommand('copy');
+                    if (shareMeta) shareMeta.textContent = 'Link copiado!';
+                } catch (e2) {
+                }
+            }
+        }
+
+        if (shareCreateBtn) shareCreateBtn.addEventListener('click', async () => {
+            try {
+                await createShareLink();
+            } catch (e) {
+                if (shareError) {
+                    shareError.textContent = e.message || 'Erro ao gerar link';
+                    shareError.classList.remove('hidden');
+                }
+            }
+        });
+        if (shareRevokeBtn) shareRevokeBtn.addEventListener('click', async () => {
+            try {
+                await revokeShareLink();
+            } catch (e) {
+                if (shareError) {
+                    shareError.textContent = e.message || 'Erro ao revogar link';
+                    shareError.classList.remove('hidden');
+                }
+            }
+        });
+        if (shareCopyBtn) shareCopyBtn.addEventListener('click', copyShareLink);
+        if (shareBtn) shareBtn.addEventListener('click', async () => {
+            if (!currentConversionId) return;
+            showShareModal();
+            try {
+                await refreshShareInfo();
+            } catch (e) {
+                if (shareError) {
+                    shareError.textContent = e.message || 'Erro ao carregar compartilhamento';
+                    shareError.classList.remove('hidden');
+                }
+            }
+        });
+
+        if (chaptersCloseBtn) chaptersCloseBtn.addEventListener('click', hideChaptersModal);
+        if (chaptersModal) {
+            chaptersModal.addEventListener('click', (ev) => {
+                if (ev.target === chaptersModal) hideChaptersModal();
+            });
+        }
+
+        closeLibraryBtn.addEventListener('click', hideLibrary);
+        libraryModal.addEventListener('click', (ev) => {
+            if (ev.target === libraryModal) {
+                hideLibrary();
+            }
+        });
+        openLibraryBtn.addEventListener('click', async (ev) => {
+            try {
+                ev.preventDefault();
+                ev.stopPropagation();
+            } catch (e) {
+            }
+            if (!authToken) {
+                showAuthModal();
+                return;
+            }
+            setTimeout(async () => {
+                showLibrary();
+                await loadLibrary();
+            }, 0);
+        });
+
+        let libraryItems = [];
+        function renderLibraryList() {
+            const q = (librarySearch && librarySearch.value ? librarySearch.value : '').toLowerCase().trim();
+            const statusFilter = libraryStatusFilter ? libraryStatusFilter.value : 'all';
+            libraryList.innerHTML = '';
+            const filtered = (libraryItems || []).filter(item => {
+                const title = (item.book_title || (item.source_filename ? item.source_filename.replace(/\.[^/.]+$/, '') : item.conversion_id) || '').toLowerCase();
+                const okQ = !q || title.includes(q) || (item.conversion_id || '').toLowerCase().includes(q);
+                const st = (item.status || '').toLowerCase();
+                const okS = statusFilter === 'all' || st === statusFilter;
+                return okQ && okS;
+            });
+
+            if (filtered.length === 0) {
+                libraryList.innerHTML = '<div class="text-sm text-gray-600">Nenhuma conversão encontrada.</div>';
+                return;
+            }
+
+            for (const item of filtered) {
+                const title = item.book_title || (item.source_filename ? item.source_filename.replace(/\.[^/.]+$/, '') : item.conversion_id);
+                const status = item.status || '';
+                const created = item.created_at ? new Date(item.created_at).toLocaleString() : '';
+                const row = document.createElement('div');
+                row.className = 'border rounded-lg p-4 flex items-center justify-between';
+                row.innerHTML = `
+                    <div>
+                        <div class="font-semibold text-gray-800">${title}</div>
+                        <div class="text-xs text-gray-500">${created}</div>
+                        <div class="text-xs text-gray-600 mt-1">${status}</div>
+                    </div>
+                    <button class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-purple-700 transition">
+                        Abrir
+                    </button>
+                `;
+                row.querySelector('button').addEventListener('click', async () => {
+                    await openConversionDetails(item.conversion_id);
+                });
+                libraryList.appendChild(row);
+            }
+        }
+
+        if (librarySearch) librarySearch.addEventListener('input', renderLibraryList);
+        if (libraryStatusFilter) libraryStatusFilter.addEventListener('change', renderLibraryList);
+
+        async function loadLibrary() {
+            libraryError.classList.add('hidden');
+            libraryList.innerHTML = '';
+            libraryDetails.classList.add('hidden');
+            libraryDetails.innerHTML = '';
+            libraryLoading.classList.remove('hidden');
+
+            try {
+                const resp = await apiFetch('/api/conversions?limit=50&offset=0');
+                if (!resp.ok) {
+                    const j = await resp.json().catch(() => ({}));
+                    throw new Error(j.error || 'Erro ao carregar conversões');
+                }
+                const data = await resp.json();
+                const items = Array.isArray(data.items) ? data.items : [];
+                libraryItems = items;
+                renderLibraryList();
+            } catch (e) {
+                libraryError.textContent = e.message || 'Erro ao carregar conversões';
+                libraryError.classList.remove('hidden');
+            } finally {
+                libraryLoading.classList.add('hidden');
+            }
+        }
+
+        async function openConversionDetails(conversionId) {
+            libraryDetails.classList.remove('hidden');
+            libraryDetails.innerHTML = '<div class="text-sm text-gray-600"><i class="fas fa-spinner fa-spin mr-2"></i>Carregando detalhes...</div>';
+            try {
+                const resp = await apiFetch(`/api/conversions/${conversionId}`);
+                if (!resp.ok) {
+                    const j = await resp.json().catch(() => ({}));
+                    throw new Error(j.error || 'Erro ao carregar conversão');
+                }
+                const data = await resp.json();
+                const title = data.book_title || (data.source_filename ? data.source_filename.replace(/\.[^/.]+$/, '') : data.conversion_id);
+                const pages = Array.isArray(data.pages_info) ? data.pages_info : [];
+                const chaptersInfo = Array.isArray(data.chapters_info) ? data.chapters_info : [];
+                let mergedStorage = data.merged_storage || null;
+                if (typeof mergedStorage === 'string') {
+                    try { mergedStorage = JSON.parse(mergedStorage); } catch (e) {}
+                }
+                const mergedLocal = data.merged_file || null;
+
+                const parts = [];
+                parts.push(`<div class="flex items-center justify-between mb-3">
+                    <div>
+                        <div class="text-lg font-semibold text-gray-800">${title}</div>
+                        <div class="text-xs text-gray-500">${data.created_at ? new Date(data.created_at).toLocaleString() : ''}</div>
+                    </div>
+                    <div class="text-xs text-gray-600">${data.status || ''}</div>
+                </div>`);
+
+                if (chaptersInfo.length > 0) {
+                    const lines = chaptersInfo.map(c => {
+                        const t = c.title || `Capítulo ${c.chapter_index || ''}`;
+                        const partsN = c.parts ? `${c.parts} partes` : '';
+                        return `${t}${partsN ? ` (${partsN})` : ''}`;
+                    });
+                    parts.push(`<div class="text-xs text-gray-600 mb-3">${lines.join('<br>')}</div>`);
+                }
+
+                const canMerge = (data.status === 'completed');
+                parts.push(`<div class="flex flex-wrap gap-2 items-center mb-3">
+                    <button id="libraryMergeBtn_${conversionId}" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-purple-700 transition ${canMerge ? '' : 'opacity-50 cursor-not-allowed'}" ${canMerge ? '' : 'disabled'}>
+                        <i class="fas fa-compress-alt mr-2"></i>Juntar áudios
+                    </button>
+                    <button id="libraryZipBtn_${conversionId}" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition">
+                        <i class="fas fa-file-archive mr-2"></i>Baixar ZIP
+                    </button>
+                    <button id="libraryDeleteBtn_${conversionId}" class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-red-700 transition">
+                        <i class="fas fa-trash mr-2"></i>Excluir pasta
+                    </button>
+                    <span id="libraryActionMsg_${conversionId}" class="text-sm text-gray-600"></span>
+                </div>`);
+
+                parts.push(`<div class="border rounded-lg p-4 bg-gray-50">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="text-sm font-semibold text-gray-800">
+                            <i class="fas fa-headphones mr-2 text-purple-600"></i>Player contínuo
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button id="libraryPrevBtn_${conversionId}" class="bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded hover:bg-gray-100 transition">
+                                <i class="fas fa-step-backward"></i>
+                            </button>
+                            <button id="libraryPlayBtn_${conversionId}" class="bg-purple-600 text-white px-4 py-2 rounded font-semibold hover:bg-purple-700 transition">
+                                <i class="fas fa-play mr-2"></i>Tocar
+                            </button>
+                            <button id="libraryNextBtn_${conversionId}" class="bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded hover:bg-gray-100 transition">
+                                <i class="fas fa-step-forward"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="libraryNow_${conversionId}" class="text-xs text-gray-600 mb-2">Nenhuma faixa selecionada</div>
+                    <audio id="libraryAudio_${conversionId}" controls class="w-full"></audio>
+                    <div class="mt-3 border rounded-lg bg-white p-3">
+                        <div class="text-xs font-semibold text-gray-700 mb-1">
+                            <i class="fas fa-book-reader mr-2 text-purple-600"></i>Texto da parte
+                        </div>
+                        <div id="libraryFollowStatus_${conversionId}" class="text-xs text-gray-500 mb-2"></div>
+                        <div id="libraryFollowBody_${conversionId}" class="text-sm text-gray-800 whitespace-pre-wrap max-h-56 overflow-auto leading-6"></div>
+                    </div>
+                </div>`);
+
+                if (mergedStorage && mergedStorage.signed_url) {
+                    parts.push(`<a class="inline-flex items-center text-blue-600 hover:underline text-sm" href="${mergedStorage.signed_url}" target="_blank" rel="noreferrer">
+                        <i class="fas fa-file-audio mr-2"></i>Baixar mesclado
+                    </a>`);
+                } else if (mergedLocal) {
+                    parts.push(`<button id="libraryDownloadMergedBtn_${conversionId}" class="inline-flex items-center text-blue-600 hover:underline text-sm">
+                        <i class="fas fa-file-audio mr-2"></i>Baixar mesclado
+                    </button>`);
+                }
+
+                if (pages.length === 0) {
+                    parts.push('<div class="mt-4 text-sm text-gray-600">Nenhum áudio encontrado.</div>');
+                    libraryDetails.innerHTML = parts.join('');
+                    wireLibraryActions(conversionId, canMerge);
+                    return;
+                }
+
+                parts.push('<div class="mt-4 space-y-3">');
+                for (let i = 0; i < pages.length; i++) {
+                    const p = pages[i];
+                    const pageNum = p.page_number || '';
+                    const fname = p.filename || '';
+                    const rowLabel = p.display_label || `Página ${pageNum}`;
+                    let src = null;
+                    if (p.storage && p.storage.signed_url) src = p.storage.signed_url;
+                    if (!src && fname) src = `/play/${conversionId}/${fname}?t=${Date.now()}`;
+                    const isWav = fname.toLowerCase().endsWith('.wav');
+                    const mimeType = isWav ? 'audio/wav' : 'audio/mpeg';
+                    parts.push(`
+                        <div class="border rounded-lg p-3" data-lib-card-index="${i}">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="text-sm font-semibold text-gray-800">${rowLabel}</div>
+                                <div class="flex items-center space-x-3">
+                                    <button data-lib-page-index="${i}" class="bg-purple-500 text-white px-3 py-1 rounded text-sm hover:bg-purple-600 transition">
+                                        <i class="fas fa-play mr-1"></i>Tocar contínuo
+                                    </button>
+                                    ${fname ? `<a class="text-sm text-blue-600 hover:underline" href="/download/${conversionId}/${fname}?t=${Date.now()}" target="_blank" rel="noreferrer">Baixar</a>` : ''}
+                                </div>
+                            </div>
+                            ${src ? `<audio controls class="w-full"><source src="${src}" type="${mimeType}"></audio>` : `<div class="text-sm text-gray-600">Áudio não disponível.</div>`}
+                        </div>
+                    `);
+                }
+                parts.push('</div>');
+
+                libraryDetails.innerHTML = parts.join('');
+                wireLibraryActions(conversionId, canMerge);
+                initLibraryContinuousPlayer(conversionId, title, pages);
+            } catch (e) {
+                libraryDetails.innerHTML = `<div class="text-sm text-red-600">${e.message || 'Erro ao carregar conversão'}</div>`;
+            }
+        }
+
+        function initLibraryContinuousPlayer(conversionId, title, pages) {
+            libraryConversionId = conversionId;
+            libraryPlaylist = [];
+            libraryCurrentIndex = 0;
+            libraryAudioEl = document.getElementById(`libraryAudio_${conversionId}`);
+            libraryNowEl = document.getElementById(`libraryNow_${conversionId}`);
+            libraryPlayBtnEl = document.getElementById(`libraryPlayBtn_${conversionId}`);
+            const libraryFollowStatus = document.getElementById(`libraryFollowStatus_${conversionId}`);
+            const libraryFollowBody = document.getElementById(`libraryFollowBody_${conversionId}`);
+            let libSegments = [];
+            let libActive = -1;
+            const prevBtn = document.getElementById(`libraryPrevBtn_${conversionId}`);
+            const nextBtn = document.getElementById(`libraryNextBtn_${conversionId}`);
+
+            if (!libraryAudioEl || !libraryNowEl || !libraryPlayBtnEl) return;
+
+            for (const p of pages) {
+                const fname = p.filename || '';
+                let src = null;
+                if (p.storage && p.storage.signed_url) src = p.storage.signed_url;
+                if (!src && fname) src = `/play/${conversionId}/${fname}?t=${Date.now()}`;
+                if (!src) continue;
+                libraryPlaylist.push({
+                    page_number: p.page_number,
+                    filename: fname,
+                    src,
+                    title,
+                    display_label: p.display_label || null
+                });
+            }
+
+            function updateNow() {
+                if (!libraryPlaylist.length) {
+                    libraryNowEl.textContent = 'Nenhuma faixa selecionada';
+                    return;
+                }
+                const cur = libraryPlaylist[libraryCurrentIndex];
+                const pn = cur.page_number || '';
+                const lbl = cur.display_label || `Página ${pn}`;
+                libraryNowEl.textContent = `Tocando: ${title} — ${lbl}`;
+            }
+
+            function setPlayLabel(isPlayingNow) {
+                if (isPlayingNow) {
+                    libraryPlayBtnEl.innerHTML = '<i class="fas fa-pause mr-2"></i>Pausar';
+                } else {
+                    libraryPlayBtnEl.innerHTML = '<i class="fas fa-play mr-2"></i>Tocar';
+                }
+            }
+
+            function highlightLibraryCard(idx) {
+                try {
+                    const cards = libraryDetails.querySelectorAll('[data-lib-card-index]');
+                    cards.forEach(el => {
+                        const i = parseInt(el.getAttribute('data-lib-card-index') || '-1', 10);
+                        if (i === idx) el.classList.add('track-active');
+                        else el.classList.remove('track-active');
+                    });
+                    const active = libraryDetails.querySelector(`[data-lib-card-index="${idx}"]`);
+                    if (active) active.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                } catch (e) {
+                }
+            }
+
+            async function loadLibraryFollowText(pageNumber, label) {
+                libSegments = [];
+                libActive = -1;
+                if (libraryFollowStatus) libraryFollowStatus.textContent = 'Carregando texto...';
+                if (libraryFollowBody) libraryFollowBody.textContent = '';
+                try {
+                    const r = await apiFetch(`/api/conversions/${conversionId}/page-text/${pageNumber}`);
+                    if (!r.ok) {
+                        const j = await r.json().catch(() => ({}));
+                        throw new Error(j.error || 'Texto não disponível');
+                    }
+                    const j = await r.json();
+                    const txt = j.text || '';
+                    libSegments = splitToSegments(txt);
+                    if (libraryFollowStatus) libraryFollowStatus.textContent = label ? label : '';
+                    renderSegments(libraryFollowBody, libSegments);
+                    libActive = 0;
+                    setActiveSegment(libraryFollowBody, 0);
+                } catch (e) {
+                    if (libraryFollowStatus) libraryFollowStatus.textContent = e.message || 'Texto não disponível';
+                }
+            }
+
+            function updateLibraryFollowByAudio() {
+                if (!libraryAudioEl || !libSegments || libSegments.length === 0) return;
+                const dur = libraryAudioEl.duration;
+                if (!dur || !isFinite(dur) || dur <= 0) return;
+                const prog = Math.max(0, Math.min(1, libraryAudioEl.currentTime / dur));
+                const idx = Math.min(libSegments.length - 1, Math.floor(prog * libSegments.length));
+                if (idx !== libActive) {
+                    libActive = idx;
+                    setActiveSegment(libraryFollowBody, idx);
+                }
+            }
+
+            async function playFrom(index) {
+                if (!libraryPlaylist.length) return;
+                libraryCurrentIndex = Math.max(0, Math.min(index, libraryPlaylist.length - 1));
+                const cur = libraryPlaylist[libraryCurrentIndex];
+                libraryAudioEl.src = cur.src;
+                updateNow();
+                highlightLibraryCard(libraryCurrentIndex);
+                loadLibraryFollowText(cur.page_number, cur.display_label || '');
+                try {
+                    const resumeAt = loadPlaybackPos(conversionId, cur.filename || '');
+                    libraryAudioEl.load();
+                    libraryAudioEl.onloadedmetadata = () => {
+                        try {
+                            if (resumeAt > 0 && isFinite(libraryAudioEl.duration) && libraryAudioEl.duration > 0) {
+                                const safe = Math.max(0, Math.min(resumeAt, Math.max(0, libraryAudioEl.duration - 2)));
+                                if (safe > 0) libraryAudioEl.currentTime = safe;
+                            }
+                        } catch (e) {
+                        }
+                    };
+                    await libraryAudioEl.play();
+                    setPlayLabel(true);
+                } catch (e) {
+                    setPlayLabel(false);
+                }
+            }
+
+            function next() {
+                if (!libraryPlaylist.length) return;
+                if (libraryCurrentIndex >= libraryPlaylist.length - 1) {
+                    libraryAudioEl.pause();
+                    setPlayLabel(false);
+                    return;
+                }
+                playFrom(libraryCurrentIndex + 1);
+            }
+
+            function prev() {
+                if (!libraryPlaylist.length) return;
+                playFrom(Math.max(0, libraryCurrentIndex - 1));
+            }
+
+            libraryAudioEl.onended = () => next();
+            libraryAudioEl.onpause = () => setPlayLabel(false);
+            libraryAudioEl.onplay = () => setPlayLabel(true);
+            let libLastSaveMs = 0;
+            libraryAudioEl.ontimeupdate = () => {
+                updateLibraryFollowByAudio();
+                try {
+                    const cur = libraryPlaylist[libraryCurrentIndex];
+                    if (!cur || !cur.filename) return;
+                    const now = Date.now();
+                    if (now - libLastSaveMs < 2000) return;
+                    libLastSaveMs = now;
+                    const t = libraryAudioEl.currentTime || 0;
+                    if (t > 1) savePlaybackPos(conversionId, cur.filename, t);
+                } catch (e) {
+                }
+            };
+
+            libraryPlayBtnEl.onclick = async () => {
+                if (!libraryPlaylist.length) return;
+                if (!libraryAudioEl.src) {
+                    await playFrom(0);
+                    return;
+                }
+                if (libraryAudioEl.paused) {
+                    try {
+                        await libraryAudioEl.play();
+                    } catch (e) {
+                    }
+                } else {
+                    libraryAudioEl.pause();
+                }
+            };
+
+            if (prevBtn) prevBtn.onclick = () => prev();
+            if (nextBtn) nextBtn.onclick = () => next();
+
+            const pageBtns = libraryDetails.querySelectorAll('[data-lib-page-index]');
+            pageBtns.forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const idxStr = btn.getAttribute('data-lib-page-index') || '0';
+                    const idx = parseInt(idxStr, 10);
+                    await playFrom(isNaN(idx) ? 0 : idx);
+                });
+            });
+
+            updateNow();
+            setPlayLabel(false);
+            highlightLibraryCard(libraryCurrentIndex);
+        }
+
+        function wireLibraryActions(conversionId, canMerge) {
+            const mergeBtn = document.getElementById(`libraryMergeBtn_${conversionId}`);
+            const zipBtn = document.getElementById(`libraryZipBtn_${conversionId}`);
+            const deleteBtn = document.getElementById(`libraryDeleteBtn_${conversionId}`);
+            const mergedBtn = document.getElementById(`libraryDownloadMergedBtn_${conversionId}`);
+            const msg = document.getElementById(`libraryActionMsg_${conversionId}`);
+
+            if (mergeBtn) {
+                mergeBtn.addEventListener('click', async () => {
+                    if (!canMerge) return;
+                    const okFfmpeg = await checkFfmpegOrExplain();
+                    if (!okFfmpeg) return;
+                    msg.textContent = 'Iniciando mesclagem...';
+                    mergeBtn.disabled = true;
+                    try {
+                        const j = await debugMerge(conversionId, msg);
+                        if (!j) return;
+                        await pollMerge(conversionId, msg);
+                        await openConversionDetails(conversionId);
+                    } catch (e) {
+                        msg.textContent = e.message || 'Erro ao mesclar';
+                    } finally {
+                        mergeBtn.disabled = false;
+                    }
+                });
+            }
+
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', async () => {
+                    const ok = confirm('Tem certeza que deseja excluir esta pasta/conversão? Isso apaga os áudios e o registro.');
+                    if (!ok) return;
+                    deleteBtn.disabled = true;
+                    msg.textContent = 'Excluindo...';
+                    try {
+                        const r = await apiFetch(`/api/conversions/${conversionId}/delete`, { method: 'POST' });
+                        const j = await r.json().catch(() => ({}));
+                        if (!r.ok) throw new Error(j.error || 'Erro ao excluir');
+                        msg.textContent = 'Excluído.';
+                        libraryDetails.classList.add('hidden');
+                        libraryDetails.innerHTML = '';
+                        await loadLibrary();
+                    } catch (e) {
+                        msg.textContent = e.message || 'Erro ao excluir';
+                    } finally {
+                        deleteBtn.disabled = false;
+                    }
+                });
+            }
+
+            if (zipBtn) {
+                zipBtn.addEventListener('click', async () => {
+                    zipBtn.disabled = true;
+                    msg.textContent = 'Gerando ZIP...';
+                    try {
+                        await downloadZip(conversionId);
+                        msg.textContent = '';
+                    } catch (e) {
+                        msg.textContent = e.message || 'Erro ao baixar ZIP';
+                    } finally {
+                        zipBtn.disabled = false;
+                    }
+                });
+            }
+
+            if (mergedBtn) {
+                mergedBtn.addEventListener('click', async () => {
+                    mergedBtn.disabled = true;
+                    msg.textContent = 'Baixando mesclado...';
+                    try {
+                        await downloadMerged(conversionId);
+                        msg.textContent = '';
+                    } catch (e) {
+                        msg.textContent = e.message || 'Erro ao baixar mesclado';
+                    } finally {
+                        mergedBtn.disabled = false;
+                    }
+                });
+            }
+        }
+
+        async function pollMerge(conversionId, msgEl) {
+            for (let i = 0; i < 120; i++) {
+                const r = await apiFetch(`/status/${conversionId}`);
+                const s = await r.json().catch(() => ({}));
+                const st = s.merge_status || '';
+                const p = typeof s.merge_progress === 'number' ? s.merge_progress : null;
+                if (st === 'completed') {
+                    msgEl.textContent = 'Mesclagem concluída.';
+                    return;
+                }
+                if (st === 'error') {
+                    msgEl.textContent = s.merge_message || 'Erro na mesclagem';
+                    return;
+                }
+                if (p !== null) {
+                    msgEl.textContent = `Mesclando... ${p}%`;
+                } else {
+                    msgEl.textContent = 'Mesclando...';
+                }
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+            msgEl.textContent = 'Mesclagem demorou mais que o esperado.';
+        }
+
+        // Load enhanced voice profiles
+        loadEnhancedVoiceProfiles();
+        loadEdgeVoices();
+        loadOfflineVoices();
+
+        async function loadEnhancedVoiceProfiles() {
+            try {
+                const response = await apiFetch('/enhanced-voice-profiles');
+                const data = await response.json();
+
+                if (data.available) {
+                    enhancedVoiceSelect.innerHTML = '<option value="default">Padrão (GTTS)</option>';
+                    
+                    for (const [key, value] of Object.entries(data.profiles)) {
+                        const option = document.createElement('option');
+                        option.value = key;
+                        option.textContent = value;
+                        enhancedVoiceSelect.appendChild(option);
+                    }
+                    
+                    enhancedVoiceStatus.innerHTML = `<i class="fas fa-check-circle text-green-500 mr-1"></i>${data.description}`;
+                    enhancedVoiceStatus.className = 'mt-2 text-sm text-green-600';
+                } else {
+                    enhancedVoiceStatus.innerHTML = `<i class="fas fa-exclamation-triangle text-yellow-500 mr-1"></i>${data.message}`;
+                    enhancedVoiceStatus.className = 'mt-2 text-sm text-yellow-600';
+                    enhancedVoiceSelect.disabled = true;
+                }
+            } catch (error) {
+                enhancedVoiceStatus.innerHTML = '<i class="fas fa-times-circle text-red-500 mr-1"></i>Erro ao carregar vozes';
+                enhancedVoiceStatus.className = 'mt-2 text-sm text-red-600';
+                enhancedVoiceSelect.disabled = true;
+            }
+        }
+
+        async function loadOfflineVoices() {
+            try {
+                const response = await apiFetch('/offline-status');
+                const data = await response.json();
+                if (!data.sapi_available) {
+                    offlineVoiceSection.classList.add('hidden');
+                    return;
+                }
+
+                offlineVoiceSection.classList.remove('hidden');
+                offlineVoiceStatus.textContent = 'Vozes do Windows disponíveis.';
+
+                const voices = Array.isArray(data.voices) ? data.voices : [];
+                if (voices.length > 0) {
+                    sapiVoiceSelect.classList.remove('hidden');
+                    sapiVoiceSelect.innerHTML = '<option value="">Selecionar voz do Windows (opcional)</option>';
+                    for (const v of voices) {
+                        const opt = document.createElement('option');
+                        opt.value = v;
+                        opt.textContent = v;
+                        sapiVoiceSelect.appendChild(opt);
+                    }
+                }
+
+                offlineToggle.addEventListener('change', () => {
+                    if (offlineToggle.checked) {
+                        offlineVoiceStatus.textContent = 'Modo offline ativado (SAPI).';
+                        sapiVoiceSelect.disabled = false;
+                    } else {
+                        offlineVoiceStatus.textContent = 'Modo offline desativado.';
+                        sapiVoiceSelect.disabled = true;
+                    }
+                });
+                sapiVoiceSelect.disabled = true;
+            } catch (e) {
+                offlineVoiceSection.classList.add('hidden');
+            }
+        }
+
+        async function loadEdgeVoices() {
+            try {
+                const response = await apiFetch(`/tts-voices?lang=${encodeURIComponent(languageSelect.value)}`);
+                const data = await response.json();
+                if (!data.available || !Array.isArray(data.voices) || data.voices.length === 0) {
+                    edgeVoiceSection.classList.add('hidden');
+                    return;
+                }
+
+                edgeVoiceSection.classList.remove('hidden');
+                edgeVoiceStatus.textContent = 'Vozes reais disponíveis.';
+
+                ttsVoiceSelect.classList.remove('hidden');
+                ttsVoiceSelect.innerHTML = '<option value="">Selecione uma voz</option>';
+                for (const v of data.voices) {
+                    const opt = document.createElement('option');
+                    opt.value = v.shortName;
+                    opt.textContent = `${v.friendlyName} (${v.locale}${v.gender ? ', ' + v.gender : ''})`;
+                    ttsVoiceSelect.appendChild(opt);
+                }
+
+                const syncEngineUI = () => {
+                    const engine = ttsEngineSelect.value;
+                    const isEdge = engine === 'edge';
+                    if (isEdge) {
+                        ttsVoiceSelect.classList.remove('hidden');
+                        enhancedVoiceSelect.value = 'default';
+                        enhancedVoiceSelect.disabled = true;
+                        enhancedVoiceStatus.className = 'mt-2 text-sm text-gray-600';
+                        enhancedVoiceStatus.textContent = 'Desativado quando Edge TTS está ativo.';
+                    } else {
+                        enhancedVoiceSelect.disabled = false;
+                        ttsVoiceSelect.classList.add('hidden');
+                        loadEnhancedVoiceProfiles();
+                    }
+                };
+
+                ttsEngineSelect.addEventListener('change', syncEngineUI);
+                syncEngineUI();
+            } catch (e) {
+                edgeVoiceSection.classList.add('hidden');
+            }
+        }
+
+        async function loadDemoVoices() {
+            if (!demoVoice || !demoEngine || !demoLang) return;
+            const engine = demoEngine.value;
+            if (engine !== 'edge') {
+                demoVoice.innerHTML = '<option value="" selected>Voz padrão</option>';
+                demoVoice.disabled = true;
+                return;
+            }
+            demoVoice.disabled = false;
+            demoVoice.innerHTML = '<option value="" selected>Carregando vozes...</option>';
+            try {
+                const r = await fetch(`/tts-voices?lang=${encodeURIComponent(demoLang.value)}`, { cache: 'no-store' });
+                const j = await r.json().catch(() => ({}));
+                const voices = j && Array.isArray(j.voices) ? j.voices : [];
+                if (!voices.length) {
+                    demoVoice.innerHTML = '<option value="" selected>Voz padrão</option>';
+                    return;
+                }
+                demoVoice.innerHTML = '<option value="" selected>Selecione uma voz</option>';
+                for (const v of voices) {
+                    const opt = document.createElement('option');
+                    opt.value = v.shortName;
+                    opt.textContent = `${v.friendlyName} (${v.locale}${v.gender ? ', ' + v.gender : ''})`;
+                    demoVoice.appendChild(opt);
+                }
+            } catch (e) {
+                demoVoice.innerHTML = '<option value="" selected>Voz padrão</option>';
+            }
+        }
+
+        if (demoEngine) demoEngine.addEventListener('change', loadDemoVoices);
+        if (demoLang) demoLang.addEventListener('change', loadDemoVoices);
+
+        async function generateDemoSample() {
+            if (!demoText || !demoGenerateBtn) return;
+            if (demoError) {
+                demoError.classList.add('hidden');
+                demoError.textContent = '';
+            }
+            const text = (demoText.value || '').trim();
+            if (!text) {
+                if (demoError) {
+                    demoError.textContent = 'Digite um texto para gerar a amostra.';
+                    demoError.classList.remove('hidden');
+                }
+                return;
+            }
+            if (text.length > 1200) {
+                if (demoError) {
+                    demoError.textContent = 'A amostra suporta até ~1.200 caracteres.';
+                    demoError.classList.remove('hidden');
+                }
+                return;
+            }
+            const engine = demoEngine ? demoEngine.value : 'gtts';
+            const voice = demoVoice ? demoVoice.value : '';
+            if (engine === 'edge' && !voice) {
+                if (demoError) {
+                    demoError.textContent = 'Selecione uma voz do Microsoft Edge.';
+                    demoError.classList.remove('hidden');
+                }
+                return;
+            }
+            demoGenerateBtn.disabled = true;
+            const old = demoGenerateBtn.innerHTML;
+            demoGenerateBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Gerando...';
+            try {
+                const r = await fetch('/demo/tts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text,
+                        lang: demoLang ? demoLang.value : 'pt',
+                        tts_engine: engine,
+                        tts_voice: voice || ''
+                    })
+                });
+                if (!r.ok) {
+                    const j = await r.json().catch(() => ({}));
+                    throw new Error(j.error || 'Erro ao gerar amostra');
+                }
+                const blob = await r.blob();
+                const url = URL.createObjectURL(blob);
+                if (demoAudio) {
+                    demoAudio.src = url;
+                    try { demoAudio.load(); } catch (e) {}
+                    if (demoAudioWrap) demoAudioWrap.classList.remove('hidden');
+                    try { await demoAudio.play(); } catch (e) {}
+                }
+            } catch (e) {
+                if (demoError) {
+                    demoError.textContent = e.message || 'Erro ao gerar amostra';
+                    demoError.classList.remove('hidden');
+                }
+            } finally {
+                demoGenerateBtn.disabled = false;
+                demoGenerateBtn.innerHTML = old;
+            }
+        }
+
+        if (demoGenerateBtn) demoGenerateBtn.addEventListener('click', generateDemoSample);
+
+        languageSelect.addEventListener('change', () => {
+            loadEdgeVoices();
+        });
+
+        // Speed slider update
+        speedSlider.addEventListener('input', (e) => {
+            speedValue.textContent = e.target.value + 'x';
+        });
+
+        // File type detection
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            const icons = {
+                'pdf': 'fas fa-file-pdf text-red-500',
+                'docx': 'fas fa-file-word text-blue-500',
+                'txt': 'fas fa-file-alt text-gray-500'
+            };
+            return icons[ext] || 'fas fa-file text-gray-500';
+        }
+
+        // Upload functionality
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                const file = files[0];
+                const ext = file.name.split('.').pop().toLowerCase();
+                if (['pdf', 'docx', 'txt'].includes(ext)) {
+                    handleFileSelect(file);
+                } else {
+                    showError('Por favor, selecione um arquivo PDF, DOCX ou TXT.');
+                }
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                if (resumeUploadMode && resumeUploadConversionId) {
+                    resumeUploadWithFile(e.target.files[0]);
+                    return;
+                }
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        function handleFileSelect(file) {
+            const ext = file.name.split('.').pop().toLowerCase();
+            if (!['pdf', 'docx', 'txt'].includes(ext)) {
+                showError('Por favor, selecione um arquivo PDF, DOCX ou TXT.');
+                return;
+            }
+
+            if (file.size > 50 * 1024 * 1024) {
+                showError('O arquivo é muito grande. Tamanho máximo: 50MB.');
+                return;
+            }
+
+            fileName.textContent = file.name;
+            fileSize.textContent = formatFileSize(file.size);
+            fileIcon.className = getFileIcon(file.name) + ' text-2xl';
+            fileInfo.classList.remove('hidden');
+            convertBtn.classList.remove('hidden');
+            convertBtn.dataset.file = file;
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        removeFile.addEventListener('click', () => {
+            fileInput.value = '';
+            fileInfo.classList.add('hidden');
+            convertBtn.classList.add('hidden');
+            resetUI();
+        });
+
+        // Convert button
+        convertBtn.addEventListener('click', async () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+            if (!authToken) {
+                showAuthModal();
+                return;
+            }
+
+            if (ttsEngineSelect && ttsEngineSelect.value === 'edge') {
+                if (!ttsVoiceSelect || !ttsVoiceSelect.value) {
+                    showError('Selecione uma voz em "Voz Real (Microsoft Edge)".');
+                    return;
+                }
+            }
+
+            function generateConversionId() {
+                try {
+                    if (crypto && crypto.randomUUID) return crypto.randomUUID();
+                } catch (e) {
+                }
+                const s = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
+                return `${s()}${s()}-${s()}-${s()}-${s()}-${s()}${s()}${s()}`;
+            }
+
+            const preId = generateConversionId();
+            currentConversionId = preId;
+            saveActiveConversion(currentConversionId);
+            setActivePhase('uploading', currentConversionId);
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('lang', languageSelect.value);
+            formData.append('speed', speedSlider.value);
+            formData.append('voice_type', voiceSelect.value);
+            formData.append('enhanced_voice', enhancedVoiceSelect.value);
+            formData.append('use_offline', offlineToggle && offlineToggle.checked ? '1' : '0');
+            formData.append('sapi_voice', sapiVoiceSelect ? sapiVoiceSelect.value : '');
+            formData.append('tts_engine', ttsEngineSelect ? ttsEngineSelect.value : 'gtts');
+            formData.append('tts_voice', ttsVoiceSelect ? ttsVoiceSelect.value : '');
+            formData.append('split_mode', splitModeSelect ? splitModeSelect.value : 'chapter');
+            formData.append('normalize_audio', normalizeToggle && normalizeToggle.checked ? '1' : '0');
+            formData.append('trim_silence', trimSilenceToggle && trimSilenceToggle.checked ? '1' : '0');
+            formData.append('conversion_id', preId);
+
+            try {
+                const ext = (file.name.split('.').pop() || '').toLowerCase();
+                const initPayload = {
+                    conversion_id: preId,
+                    filename: file.name,
+                    book_title: file.name,
+                    file_type: ext,
+                    options: {
+                        lang: languageSelect.value,
+                        speed: parseFloat(speedSlider.value),
+                        voice_type: voiceSelect.value,
+                        enhanced_voice: enhancedVoiceSelect.value,
+                        use_offline: offlineToggle && offlineToggle.checked,
+                        sapi_voice: sapiVoiceSelect ? sapiVoiceSelect.value : '',
+                        tts_engine: ttsEngineSelect ? ttsEngineSelect.value : 'gtts',
+                        tts_voice: ttsVoiceSelect ? ttsVoiceSelect.value : '',
+                        split_mode: splitModeSelect ? splitModeSelect.value : 'chapter',
+                        normalize_audio: normalizeToggle && normalizeToggle.checked,
+                        trim_silence: trimSilenceToggle && trimSilenceToggle.checked
+                    }
+                };
+                const initResp = await apiFetch('/api/conversions/init', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(initPayload)
+                });
+                const initJson = await initResp.json().catch(() => ({}));
+                if (!initResp.ok) throw new Error(initJson.error || 'Erro ao iniciar conversão');
+                showProgress();
+                startStatusCheck();
+                await uploadFileInChunks(file, currentConversionId);
+                const done = await apiFetch(`/api/upload/complete/${currentConversionId}`, { method: 'POST' });
+                const j = await done.json().catch(() => ({}));
+                if (!done.ok) throw new Error(j.error || 'Erro ao finalizar upload');
+                currentConversionId = j.conversion_id || currentConversionId;
+                saveActiveConversion(currentConversionId);
+                setActivePhase('processing', currentConversionId);
+                startStatusCheck();
+            } catch (error) {
+                showError('Erro de conexão. Tente novamente.');
+                clearActiveConversion();
+            }
+        });
+
+        // Playlist functionality
+        let followSegments = [];
+        let followActiveSeg = -1;
+        let followVisible = true;
+        let followMode = 'segments';
+        let followAlignment = [];
+        let followActiveAlign = -1;
+
+        function splitToSegments(text) {
+            const t = (text || '').trim();
+            if (!t) return [];
+            const raw = t
+                .replace(/\r\n/g, '\n')
+                .replace(/\n{3,}/g, '\n\n');
+            const parts = raw
+                .split(/(?<=[\.\!\?\:])\s+|\n\n+/)
+                .map(s => s.trim())
+                .filter(Boolean);
+            return parts.slice(0, 800);
+        }
+
+        function renderSegments(container, segments) {
+            if (!container) return;
+            if (!segments || segments.length === 0) {
+                container.textContent = '';
+                return;
+            }
+            container.innerHTML = segments.map((s, i) => `<span data-seg-index="${i}">${escapeHtml(s)} </span>`).join('');
+        }
+
+        function escapeHtml(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/\"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function setActiveSegment(container, idx) {
+            if (!container) return;
+            const spans = container.querySelectorAll('[data-seg-index]');
+            spans.forEach(el => {
+                const i = parseInt(el.getAttribute('data-seg-index') || '-1', 10);
+                if (i === idx) el.classList.add('seg-active');
+                else el.classList.remove('seg-active');
+            });
+            const active = container.querySelector(`[data-seg-index="${idx}"]`);
+            if (active) {
+                try {
+                    active.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                } catch (e) {
+                }
+            }
+        }
+
+        function renderAlignedText(container, text, alignment) {
+            if (!container) return;
+            const t = String(text || '');
+            const a = Array.isArray(alignment) ? alignment.slice() : [];
+            a.sort((x, y) => (x.text_offset || 0) - (y.text_offset || 0));
+            let last = 0;
+            const parts = [];
+            for (let i = 0; i < a.length; i++) {
+                const it = a[i] || {};
+                const off = typeof it.text_offset === 'number' ? it.text_offset : parseInt(it.text_offset || '0', 10);
+                const len = typeof it.text_length === 'number' ? it.text_length : parseInt(it.text_length || '0', 10);
+                const tms = typeof it.t_ms === 'number' ? it.t_ms : parseInt(it.t_ms || '0', 10);
+                if (!isFinite(off) || !isFinite(len) || !isFinite(tms)) continue;
+                if (off < last) continue;
+                if (off > t.length) continue;
+                parts.push(escapeHtml(t.slice(last, off)));
+                const word = t.slice(off, Math.min(t.length, off + len));
+                parts.push(`<span data-align-index="${parts.length}" data-t="${tms}">${escapeHtml(word)}</span>`);
+                last = Math.min(t.length, off + len);
+            }
+            parts.push(escapeHtml(t.slice(last)));
+            container.innerHTML = parts.join('');
+        }
+
+        function setActiveAligned(container, idx) {
+            if (!container) return;
+            const spans = container.querySelectorAll('[data-t]');
+            spans.forEach(el => el.classList.remove('seg-active'));
+            const active = container.querySelectorAll('[data-t]')[idx];
+            if (active) {
+                active.classList.add('seg-active');
+                try {
+                    active.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                } catch (e) {
+                }
+            }
+        }
+
+        async function loadFollowText(conversionId, pageNumber, label) {
+            followSegments = [];
+            followActiveSeg = -1;
+            followMode = 'segments';
+            followAlignment = [];
+            followActiveAlign = -1;
+            if (followTextTitle) followTextTitle.textContent = label || 'Texto';
+            if (followTextStatus) followTextStatus.textContent = 'Carregando texto...';
+            if (followTextBody) followTextBody.textContent = '';
+            try {
+                const r = await apiFetch(`/api/conversions/${conversionId}/page-text/${pageNumber}`);
+                if (!r.ok) {
+                    const j = await r.json().catch(() => ({}));
+                    throw new Error(j.error || 'Texto não disponível');
+                }
+                const j = await r.json();
+                const txt = j.text || '';
+                const alignment = Array.isArray(j.alignment) ? j.alignment.filter(x => x && typeof x.t_ms === 'number' && typeof x.text_offset === 'number' && typeof x.text_length === 'number') : [];
+                if (alignment.length >= 4) {
+                    followMode = 'alignment';
+                    followAlignment = alignment.slice().sort((a, b) => a.t_ms - b.t_ms);
+                    if (followTextStatus) followTextStatus.textContent = '';
+                    renderAlignedText(followTextBody, txt, followAlignment);
+                    followActiveAlign = 0;
+                    setActiveAligned(followTextBody, 0);
+                } else {
+                    followSegments = splitToSegments(txt);
+                    if (followTextStatus) followTextStatus.textContent = followSegments.length ? '' : 'Texto vazio';
+                    renderSegments(followTextBody, followSegments);
+                    setActiveSegment(followTextBody, 0);
+                    followActiveSeg = 0;
+                }
+            } catch (e) {
+                if (followTextStatus) followTextStatus.textContent = e.message || 'Texto não disponível';
+            }
+        }
+
+        function updateFollowByAudio(audioEl) {
+            if (!followVisible) return;
+            if (!audioEl) return;
+            const dur = audioEl.duration;
+            if (!dur || !isFinite(dur) || dur <= 0) return;
+            if (followMode === 'alignment' && followAlignment && followAlignment.length) {
+                const tms = Math.max(0, Math.floor(audioEl.currentTime * 1000));
+                let lo = 0;
+                let hi = followAlignment.length - 1;
+                let best = 0;
+                while (lo <= hi) {
+                    const mid = (lo + hi) >> 1;
+                    if ((followAlignment[mid].t_ms || 0) <= tms) {
+                        best = mid;
+                        lo = mid + 1;
+                    } else {
+                        hi = mid - 1;
+                    }
+                }
+                if (best !== followActiveAlign) {
+                    followActiveAlign = best;
+                    setActiveAligned(followTextBody, best);
+                }
+                return;
+            }
+            if (!followSegments || followSegments.length === 0) return;
+            const prog = Math.max(0, Math.min(1, audioEl.currentTime / dur));
+            const idx = Math.min(followSegments.length - 1, Math.floor(prog * followSegments.length));
+            if (idx !== followActiveSeg) {
+                followActiveSeg = idx;
+                setActiveSegment(followTextBody, idx);
+            }
+        }
+
+        if (toggleFollowText) {
+            toggleFollowText.addEventListener('click', () => {
+                followVisible = !followVisible;
+                if (followTextBody) followTextBody.style.display = followVisible ? '' : 'none';
+                if (followTextStatus) followTextStatus.style.display = followVisible ? '' : 'none';
+                toggleFollowText.textContent = followVisible ? 'Ocultar' : 'Mostrar';
+            });
+        }
+
+        playAllBtn.addEventListener('click', () => {
+            if (playlist.length === 0) return;
+            
+            if (isPlaying) {
+                mainAudioPlayer.pause();
+                playAllBtn.innerHTML = '<i class="fas fa-play mr-2"></i>Play All';
+                isPlaying = false;
+            } else {
+                playTrack(0);
+                playAllBtn.innerHTML = '<i class="fas fa-pause mr-2"></i>Pause';
+                isPlaying = true;
+            }
+        });
+
+        stopAllBtn.addEventListener('click', () => {
+            mainAudioPlayer.pause();
+            mainAudioPlayer.currentTime = 0;
+            currentTrackIndex = 0;
+            isPlaying = false;
+            playAllBtn.innerHTML = '<i class="fas fa-play mr-2"></i>Play All';
+            updatePlaylistDisplay();
+            setActiveTrack(currentTrackIndex);
+        });
+
+        mainAudioPlayer.addEventListener('ended', () => {
+            if (currentTrackIndex < playlist.length - 1) {
+                currentTrackIndex++;
+                playTrack(currentTrackIndex);
+            } else {
+                // End of playlist
+                isPlaying = false;
+                playAllBtn.innerHTML = '<i class="fas fa-play mr-2"></i>Play All';
+            }
+        });
+
+        let lastPlaybackSaveMs = 0;
+        mainAudioPlayer.addEventListener('timeupdate', () => {
+            if (playlist.length > 0) {
+                const progress = ((currentTrackIndex + (mainAudioPlayer.currentTime / mainAudioPlayer.duration)) / playlist.length) * 100;
+                document.getElementById('playlistProgressBar').style.width = progress + '%';
+            }
+            updateFollowByAudio(mainAudioPlayer);
+            try {
+                if (!currentConversionId || !playlist.length) return;
+                const track = playlist[currentTrackIndex];
+                if (!track || !track.filename) return;
+                const now = Date.now();
+                if (now - lastPlaybackSaveMs < 2000) return;
+                lastPlaybackSaveMs = now;
+                const t = mainAudioPlayer.currentTime || 0;
+                if (t > 1) savePlaybackPos(currentConversionId, track.filename, t);
+            } catch (e) {
+            }
+        });
+
+        function playTrack(index) {
+            if (index < 0 || index >= playlist.length) return;
+            
+            currentTrackIndex = index;
+            const track = playlist[index];
+            mainAudioPlayer.src = `/play/${currentConversionId}/${track.filename}?t=${Date.now()}`;
+            mainAudioPlayer.load();
+            const resumeAt = loadPlaybackPos(currentConversionId, track.filename);
+            const applyResume = () => {
+                try {
+                    if (resumeAt > 0 && isFinite(mainAudioPlayer.duration) && mainAudioPlayer.duration > 0) {
+                        const safe = Math.max(0, Math.min(resumeAt, Math.max(0, mainAudioPlayer.duration - 2)));
+                        if (safe > 0) mainAudioPlayer.currentTime = safe;
+                    }
+                } catch (e) {
+                }
+                try { mainAudioPlayer.play(); } catch (e) {}
+            };
+            mainAudioPlayer.onloadedmetadata = applyResume;
+            updatePlaylistDisplay();
+            setActiveTrack(currentTrackIndex);
+            const label = track.display_label || `Página ${track.page_number}`;
+            loadFollowText(currentConversionId, track.page_number, label);
+        }
+
+        function updatePlaylistDisplay() {
+            if (playlist.length > 0) {
+                const track = playlist[currentTrackIndex];
+                const label = track.display_label || `Página ${track.page_number}`;
+                document.getElementById('currentTrack').textContent = label;
+                document.getElementById('trackProgress').textContent = `${currentTrackIndex + 1}/${playlist.length}`;
+            }
+        }
+
+        function setActiveTrack(index) {
+            const list = document.getElementById('audioFilesList');
+            if (!list) return;
+            const items = list.querySelectorAll('[data-track-index]');
+            items.forEach(el => {
+                const idx = parseInt(el.getAttribute('data-track-index') || '-1', 10);
+                if (idx === index) el.classList.add('track-active');
+                else el.classList.remove('track-active');
+            });
+            const active = list.querySelector(`[data-track-index="${index}"]`);
+            if (active) {
+                try {
+                    active.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                } catch (e) {
+                }
+            }
+        }
+
+        // Clear cache
+        clearCacheBtn.addEventListener('click', async () => {
+            try {
+                const response = await apiFetch('/clear-cache');
+                const result = await response.json();
+                if (response.ok) {
+                    alert('Cache limpo com sucesso!');
+                } else {
+                    alert('Erro ao limpar cache: ' + result.error);
+                }
+            } catch (error) {
+                alert('Erro ao limpar cache');
+            }
+        });
+
+        // Merge audio functionality
+        mergeAudioBtn.addEventListener('click', async () => {
+            if (!currentConversionId) {
+                alert('Nenhuma conversão disponível para mesclar');
+                return;
+            }
+            const okFfmpeg = await checkFfmpegOrExplain();
+            if (!okFfmpeg) return;
+
+            try {
+                mergeAudioBtn.disabled = true;
+                mergeAudioBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Mesclando...';
+
+                const result = await debugMerge(currentConversionId);
+                if (result) {
+                    alert('Mesclagem iniciada! Aguarde a conclusão.');
+                    startMergeStatusCheck();
+                }
+            } catch (error) {
+                alert('Erro ao iniciar mesclagem');
+            } finally {
+                mergeAudioBtn.disabled = false;
+                mergeAudioBtn.innerHTML = '<i class="fas fa-compress-alt mr-2"></i>Juntar Áudios';
+            }
+        });
+
+        // Download merged audio
+        downloadMergedBtn.addEventListener('click', async () => {
+            if (!currentConversionId) {
+                alert('Nenhum áudio mesclado disponível');
+                return;
+            }
+
+            try {
+                await downloadMerged(currentConversionId);
+            } catch (error) {
+                alert('Erro ao baixar áudio mesclado');
+            }
+        });
+
+        if (downloadM4bBtn) {
+            downloadM4bBtn.addEventListener('click', async () => {
+                if (!currentConversionId) {
+                    alert('Nenhum áudio disponível');
+                    return;
+                }
+                try {
+                    await downloadM4b(currentConversionId);
+                } catch (error) {
+                    alert('Erro ao baixar M4B');
+                }
+            });
+        }
+
+        function startMergeStatusCheck() {
+            const mergeCheckInterval = setInterval(async () => {
+                try {
+                    const response = await apiFetch(`/status/${currentConversionId}`);
+                    const status = await response.json();
+
+                    if (response.ok && status.merge_status) {
+                        if (status.merge_status === 'completed') {
+                            clearInterval(mergeCheckInterval);
+                            downloadMergedBtn.classList.remove('hidden');
+                            if (downloadM4bBtn) downloadM4bBtn.classList.remove('hidden');
+                            mergeAudioBtn.innerHTML = '<i class="fas fa-check mr-2"></i>Áudios Mesclados';
+                            mergeAudioBtn.disabled = true;
+                            alert('Mesclagem concluída com sucesso!');
+                        } else if (status.merge_status === 'error') {
+                            clearInterval(mergeCheckInterval);
+                            alert('Erro na mesclagem: ' + status.merge_message);
+                        } else {
+                            // Update merge progress
+                            mergeAudioBtn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i>Mesclando ${status.merge_progress || 0}%`;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Erro ao verificar status da mesclagem:', error);
+                }
+            }, 2000);
+        }
+
+        function startStatusCheck() {
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+            }
+            statusNotFoundCount = 0;
+            statusNetworkErrorCount = 0;
+
+            statusCheckInterval = setInterval(async () => {
+                try {
+                    const response = await apiFetch(`/status/${currentConversionId}`);
+                    if (response.ok) {
+                        statusNotFoundCount = 0;
+                        statusNetworkErrorCount = 0;
+                        const status = await response.json().catch(() => ({}));
+                        updateProgress(status);
+
+                        if (status.status === 'completed') {
+                            clearInterval(statusCheckInterval);
+                            showResults(status);
+                        } else if (status.status === 'error') {
+                            clearInterval(statusCheckInterval);
+                            showError(status.message || 'Erro no processamento.');
+                        } else if (status.status === 'paused') {
+                            clearInterval(statusCheckInterval);
+                            if (pauseBtn) pauseBtn.classList.add('hidden');
+                            if (resumeBtn) resumeBtn.classList.remove('hidden');
+                        } else if (status.status === 'cancelled') {
+                            clearInterval(statusCheckInterval);
+                            showError(status.message || 'Conversão cancelada.');
+                        }
+                    } else {
+                        const code = response.status;
+                        if (code === 404) {
+                            statusNotFoundCount += 1;
+                            const meta = getActiveConversionMeta() || {};
+                            const startedAt = typeof meta.startedAt === 'number' ? meta.startedAt : 0;
+                            const ageMs = startedAt ? (Date.now() - startedAt) : 0;
+                            if (statusNotFoundCount >= 30 && ageMs > 60 * 1000) {
+                                clearInterval(statusCheckInterval);
+                                showError('Upload interrompido ou servidor ainda não iniciou. Tente novamente.');
+                            }
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    statusNetworkErrorCount += 1;
+                    const msg = document.getElementById('progressMessage');
+                    if (msg) msg.textContent = 'Conexão instável com o servidor. Tentando reconectar...';
+                    if (statusNetworkErrorCount >= 15) {
+                        clearInterval(statusCheckInterval);
+                        showError('Conexão com o servidor foi perdida. Recarregue a página.');
+                    }
+                }
+            }, 2000);
+        }
+
+        if (resumeUploadBtn) {
+            resumeUploadBtn.addEventListener('click', async () => {
+                if (!currentConversionId) return;
+                resumeUploadConversionId = currentConversionId;
+                resumeUploadMode = true;
+                try {
+                    fileInput.click();
+                } catch (e) {
+                }
+            });
+        }
+
+        if (pauseBtn) {
+            pauseBtn.addEventListener('click', async () => {
+                if (!currentConversionId) return;
+                pauseBtn.disabled = true;
+                try {
+                    const r = await apiFetch(`/api/conversions/${currentConversionId}/pause`, { method: 'POST' });
+                    const j = await r.json().catch(() => ({}));
+                    if (!r.ok) throw new Error(j.error || 'Erro ao pausar');
+                } catch (e) {
+                    alert(e.message || 'Erro ao pausar');
+                } finally {
+                    pauseBtn.disabled = false;
+                }
+            });
+        }
+
+        if (resumeBtn) {
+            resumeBtn.addEventListener('click', async () => {
+                if (!currentConversionId) return;
+                resumeBtn.disabled = true;
+                try {
+                    const r = await apiFetch(`/api/conversions/${currentConversionId}/resume`, { method: 'POST' });
+                    const j = await r.json().catch(() => ({}));
+                    if (!r.ok) throw new Error(j.error || 'Erro ao retomar');
+                    if (resumeBtn) resumeBtn.classList.add('hidden');
+                    if (pauseBtn) pauseBtn.classList.remove('hidden');
+                    startStatusCheck();
+                } catch (e) {
+                    alert(e.message || 'Erro ao retomar');
+                } finally {
+                    resumeBtn.disabled = false;
+                }
+            });
+        }
+
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', async () => {
+                if (!currentConversionId) return;
+                const ok = confirm('Cancelar esta conversão?');
+                if (!ok) return;
+                cancelBtn.disabled = true;
+                try {
+                    const r = await apiFetch(`/api/conversions/${currentConversionId}/cancel`, { method: 'POST' });
+                    const j = await r.json().catch(() => ({}));
+                    if (!r.ok) throw new Error(j.error || 'Erro ao cancelar');
+                    showError('Conversão cancelada.');
+                } catch (e) {
+                    alert(e.message || 'Erro ao cancelar');
+                } finally {
+                    cancelBtn.disabled = false;
+                }
+            });
+        }
+
+        function updateProgress(status) {
+            document.getElementById('progressMessage').textContent = status.message;
+            document.getElementById('progressPercent').textContent = status.progress + '%';
+            document.getElementById('progressBar').style.width = status.progress + '%';
+            if (status && status.status === 'processing') {
+                if (pauseBtn) pauseBtn.classList.remove('hidden');
+                if (resumeBtn) resumeBtn.classList.add('hidden');
+                if (resumeUploadBtn) resumeUploadBtn.classList.add('hidden');
+                setActivePhase('processing', currentConversionId);
+            } else if (status && status.status === 'queued') {
+                if (pauseBtn) pauseBtn.classList.add('hidden');
+                if (resumeBtn) resumeBtn.classList.add('hidden');
+                if (resumeUploadBtn) resumeUploadBtn.classList.add('hidden');
+                setActivePhase('processing', currentConversionId);
+            } else if (status && status.status === 'uploading') {
+                if (pauseBtn) pauseBtn.classList.add('hidden');
+                if (resumeBtn) resumeBtn.classList.add('hidden');
+                if (resumeUploadBtn) resumeUploadBtn.classList.remove('hidden');
+                resumeUploadConversionId = currentConversionId;
+                setActivePhase('uploading', currentConversionId);
+            } else if (status && status.status === 'paused') {
+                setActivePhase('paused', currentConversionId);
+            }
+        }
+
+        function showResults(status) {
+            progressSection.classList.add('hidden');
+            resultsSection.classList.remove('hidden');
+            clearActiveConversion();
+            if (downloadM4bBtn) downloadM4bBtn.classList.add('hidden');
+
+            const audioFilesList = document.getElementById('audioFilesList');
+            audioFilesList.innerHTML = '';
+            if (splitModeInfo) {
+                const sm = status && status.options && status.options.split_mode ? status.options.split_mode : '';
+                splitModeInfo.textContent = sm === 'chapter' ? 'Separação: Capítulo' : (sm === 'page' ? 'Separação: Página' : '');
+            }
+            if (editChaptersBtn) {
+                const sm = status && status.options && status.options.split_mode ? status.options.split_mode : '';
+                if (sm === 'chapter') editChaptersBtn.classList.remove('hidden');
+                else editChaptersBtn.classList.add('hidden');
+            }
+            if (shareBtn) {
+                if (status && status.status === 'completed') shareBtn.classList.remove('hidden');
+                else shareBtn.classList.add('hidden');
+            }
+
+            if (status.pages_info && status.pages_info.length > 0) {
+                playlist = status.pages_info;
+                
+                status.pages_info.forEach((pageInfo, index) => {
+                    const label = pageInfo.display_label || `Página ${pageInfo.page_number}`;
+                    const audioItem = createAudioItem(index, pageInfo.page_number, pageInfo.filename, currentConversionId, label);
+                    audioFilesList.appendChild(audioItem);
+                });
+                
+                updatePlaylistDisplay();
+                setActiveTrack(currentTrackIndex);
+                
+                // Show merge button if there are multiple files
+                if (status.pages_info.length > 1) {
+                    mergeAudioBtn.classList.remove('hidden');
+                }
+                
+                // Show download merged button if already merged
+                if (status.merged_file) {
+                    downloadMergedBtn.classList.remove('hidden');
+                    if (downloadM4bBtn) downloadM4bBtn.classList.remove('hidden');
+                    mergeAudioBtn.innerHTML = '<i class="fas fa-check mr-2"></i>Áudios Mesclados';
+                    mergeAudioBtn.disabled = true;
+                }
+            } else if (status.audio_files && status.audio_files.length > 0) {
+                // Fallback for old format
+                playlist = status.audio_files.map((file, index) => ({
+                    page_number: index + 1,
+                    filename: file.split('/').pop()
+                }));
+                
+                status.audio_files.forEach((file, index) => {
+                    const filename = file.split('/').pop();
+                    const audioItem = createAudioItem(index, index + 1, filename, currentConversionId, `Página ${index + 1}`);
+                    audioFilesList.appendChild(audioItem);
+                });
+                
+                updatePlaylistDisplay();
+                setActiveTrack(currentTrackIndex);
+                
+                // Show merge button if there are multiple files
+                if (status.audio_files.length > 1) {
+                    mergeAudioBtn.classList.remove('hidden');
+                }
+            }
+        }
+
+        let chaptersDraft = [];
+
+        function deriveChaptersFromLabels(items) {
+            const map = new Map();
+            for (const it of (items || [])) {
+                const lbl = (it.display_label || '').trim();
+                if (!lbl) continue;
+                const left = lbl.includes('—') ? lbl.split('—', 1)[0].trim() : lbl;
+                if (!left) continue;
+                if (!map.has(left)) map.set(left, { chapter_index: map.size + 1, title: left });
+            }
+            return Array.from(map.values());
+        }
+
+        function renderChaptersEditor(chapters) {
+            if (!chaptersList) return;
+            chaptersList.innerHTML = '';
+            for (const c of (chapters || [])) {
+                const ci = c.chapter_index;
+                const title = c.title || '';
+                const row = document.createElement('div');
+                row.className = 'border rounded-lg p-3';
+                row.innerHTML = `
+                    <div class="text-xs text-gray-500 mb-1">Capítulo ${ci}</div>
+                    <input data-chapter-index="${ci}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" value="${escapeHtml(title)}">
+                `;
+                chaptersList.appendChild(row);
+            }
+        }
+
+        async function openChaptersEditor() {
+            if (!currentConversionId) {
+                alert('Nenhuma conversão ativa.');
+                return;
+            }
+            if (chaptersError) {
+                chaptersError.classList.add('hidden');
+                chaptersError.textContent = '';
+            }
+            showChaptersModal();
+            try {
+                const r = await apiFetch(`/api/conversions/${currentConversionId}/chapters`);
+                const j = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error(j.error || 'Erro ao carregar capítulos');
+                const ch = Array.isArray(j.chapters_info) ? j.chapters_info : [];
+                chaptersDraft = ch.length ? ch : deriveChaptersFromLabels(playlist);
+                renderChaptersEditor(chaptersDraft);
+            } catch (e) {
+                if (chaptersError) {
+                    chaptersError.textContent = e.message || 'Erro ao carregar capítulos';
+                    chaptersError.classList.remove('hidden');
+                }
+            }
+        }
+
+        async function saveChaptersEditor() {
+            if (!currentConversionId) return;
+            const inputs = chaptersList ? chaptersList.querySelectorAll('input[data-chapter-index]') : [];
+            const out = [];
+            inputs.forEach(inp => {
+                const ci = parseInt(inp.getAttribute('data-chapter-index') || '0', 10);
+                const title = (inp.value || '').trim();
+                if (!ci || !title) return;
+                out.push({ chapter_index: ci, title });
+            });
+            try {
+                const r = await apiFetch(`/api/conversions/${currentConversionId}/chapters`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chapters_info: out })
+                });
+                const j = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error(j.error || 'Erro ao salvar capítulos');
+                hideChaptersModal();
+            } catch (e) {
+                if (chaptersError) {
+                    chaptersError.textContent = e.message || 'Erro ao salvar capítulos';
+                    chaptersError.classList.remove('hidden');
+                }
+            }
+        }
+
+        if (editChaptersBtn) editChaptersBtn.addEventListener('click', openChaptersEditor);
+        if (chaptersSaveBtn) chaptersSaveBtn.addEventListener('click', saveChaptersEditor);
+
+        function createAudioItem(trackIndex, pageNumber, filename, conversionId, label) {
+            const div = document.createElement('div');
+            div.className = 'bg-gray-50 rounded-lg p-4';
+            div.setAttribute('data-track-index', String(trackIndex));
+            const isWav = filename.toLowerCase().endsWith('.wav');
+            const mimeType = isWav ? 'audio/wav' : 'audio/mpeg';
+            const srcUrl = `/play/${conversionId}/${filename}?t=${Date.now()}`;
+            
+            div.innerHTML = `
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="font-semibold text-gray-800">
+                        <i class="fas fa-file-alt mr-2 text-purple-600"></i>
+                        ${label || `Página ${pageNumber}`}
+                    </h3>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="playIndividualTrack(${trackIndex})" 
+                                class="bg-purple-500 text-white px-3 py-1 rounded text-sm hover:bg-purple-600 transition">
+                            <i class="fas fa-play"></i>
+                        </button>
+                        <button onclick="downloadAudio('${conversionId}', '${filename}')" 
+                                class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 transition">
+                            <i class="fas fa-download mr-1"></i>
+                            Baixar
+                        </button>
+                    </div>
+                </div>
+                <audio controls class="w-full audio-player rounded">
+                    <source src="${srcUrl}" type="${mimeType}">
+                    Seu navegador não suporta reprodução de áudio.
+                </audio>
+            `;
+            
+            return div;
+        }
+
+        function playIndividualTrack(index) {
+            playTrack(index);
+            if (!isPlaying) {
+                isPlaying = true;
+                playAllBtn.innerHTML = '<i class="fas fa-pause mr-2"></i>Pause';
+            }
+        }
+
+        async function downloadAudio(conversionId, filename) {
+            try {
+                const response = await apiFetch(`/download/${conversionId}/${filename}?t=${Date.now()}`);
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                }
+            } catch (error) {
+                console.error('Download error:', error);
+            }
+        }
+
+        function extractFilenameFromDisposition(disposition, fallbackName) {
+            if (!disposition) return fallbackName;
+            const utf = disposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+            if (utf && utf[1]) {
+                try { return decodeURIComponent(utf[1].trim()); } catch (e) { return utf[1].trim(); }
+            }
+            const m = disposition.match(/filename\s*=\s*\"?([^\";]+)\"?/i);
+            if (m && m[1]) return m[1].trim();
+            return fallbackName;
+        }
+
+        async function downloadMerged(conversionId, fallbackTitle) {
+            const response = await apiFetch(`/download-merged/${conversionId}?t=${Date.now()}`);
+            if (!response.ok) {
+                const j = await response.json().catch(() => ({}));
+                throw new Error(j.error || 'Erro ao baixar áudio mesclado');
+            }
+            const blob = await response.blob();
+            const cd = response.headers.get('content-disposition') || '';
+            const fallback = `${(fallbackTitle || 'audiobook')}_mesclado.mp3`;
+            const filename = extractFilenameFromDisposition(cd, fallback);
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        }
+
+        async function downloadM4b(conversionId, fallbackTitle) {
+            const response = await apiFetch(`/download-m4b/${conversionId}?t=${Date.now()}`);
+            if (!response.ok) {
+                const j = await response.json().catch(() => ({}));
+                throw new Error(j.error || 'Erro ao baixar M4B');
+            }
+            const blob = await response.blob();
+            const cd = response.headers.get('content-disposition') || '';
+            const fallback = `${(fallbackTitle || 'audiobook')}.m4b`;
+            const filename = extractFilenameFromDisposition(cd, fallback);
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        }
+
+        async function downloadZip(conversionId, fallbackTitle) {
+            const response = await apiFetch(`/download-zip/${conversionId}?t=${Date.now()}`);
+            if (!response.ok) {
+                const j = await response.json().catch(() => ({}));
+                throw new Error(j.error || 'Erro ao baixar ZIP');
+            }
+            const blob = await response.blob();
+            const cd = response.headers.get('content-disposition') || '';
+            const fallback = `${(fallbackTitle || 'audiobook')}_audios.zip`;
+            const filename = extractFilenameFromDisposition(cd, fallback);
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        }
+
+        document.getElementById('downloadAllBtn').addEventListener('click', async () => {
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+            }
+            
+            const response = await apiFetch(`/status/${currentConversionId}`);
+            const status = await response.json();
+            
+            if (status.pages_info) {
+                for (const pageInfo of status.pages_info) {
+                    await downloadAudio(currentConversionId, pageInfo.filename);
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            } else if (status.audio_files) {
+                for (const file of status.audio_files) {
+                    const filename = file.split('/').pop();
+                    await downloadAudio(currentConversionId, filename);
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            }
+        });
+
+        document.getElementById('newConversionBtn').addEventListener('click', resetUI);
+        document.getElementById('retryBtn').addEventListener('click', resetUI);
+
+        function showProgress() {
+            fileInfo.classList.add('hidden');
+            convertBtn.classList.add('hidden');
+            progressSection.classList.remove('hidden');
+            resultsSection.classList.add('hidden');
+            errorSection.classList.add('hidden');
+        }
+
+        function showError(message) {
+            progressSection.classList.add('hidden');
+            resultsSection.classList.add('hidden');
+            errorSection.classList.remove('hidden');
+            document.getElementById('errorMessage').textContent = message;
+            clearActiveConversion();
+            
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+            }
+        }
+
+        function resetUI() {
+            fileInput.value = '';
+            fileInfo.classList.add('hidden');
+            convertBtn.classList.add('hidden');
+            progressSection.classList.add('hidden');
+            resultsSection.classList.add('hidden');
+            errorSection.classList.add('hidden');
+            
+            // Hide merge buttons
+            mergeAudioBtn.classList.add('hidden');
+            downloadMergedBtn.classList.add('hidden');
+            if (downloadM4bBtn) downloadM4bBtn.classList.add('hidden');
+            mergeAudioBtn.innerHTML = '<i class="fas fa-compress-alt mr-2"></i>Juntar Áudios';
+            mergeAudioBtn.disabled = false;
+            
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+            }
+            
+            currentConversionId = null;
+            clearActiveConversion();
+            playlist = [];
+            currentTrackIndex = 0;
+            isPlaying = false;
+            mainAudioPlayer.src = '';
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editor Avançado de Texto</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+    <link href="https://cdn.quilljs.com/1.3.6/quill.bubble.css" rel="stylesheet">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        #editor {
+            height: 500px;
+            background: white;
+        }
+        .ql-toolbar {
+            border-radius: 8px 8px 0 0;
+            background: #f8f9fa;
+        }
+        .ql-container {
+            border-radius: 0 0 8px 8px;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+        .stats-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+        .word-cloud {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 16px;
+        }
+        .word-tag {
+            background: #e0e7ff;
+            color: #3730a3;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        .word-tag:hover {
+            transform: scale(1.1);
+            background: #c7d2fe;
+        }
+        .theme-dark {
+            background: #1a202c;
+            color: #e2e8f0;
+        }
+        .theme-dark .ql-toolbar {
+            background: #2d3748;
+            border-color: #4a5568;
+        }
+        .theme-dark .ql-container {
+            background: #2d3748;
+            color: #e2e8f0;
+            border-color: #4a5568;
+        }
+        .audio-controls {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .progress-ring {
+            transform: rotate(-90deg);
+        }
+        .progress-ring-circle {
+            transition: stroke-dashoffset 0.35s;
+            stroke: #667eea;
+            stroke-dasharray: 339.292;
+            stroke-dashoffset: 339.292;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <header class="gradient-bg text-white shadow-lg">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-edit text-2xl"></i>
+                    <h1 class="text-xl font-bold">Editor Avançado de Texto</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button id="themeToggle" class="bg-white bg-opacity-20 px-3 py-2 rounded-lg hover:bg-opacity-30 transition">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <button id="spellCheck" class="bg-white bg-opacity-20 px-3 py-2 rounded-lg hover:bg-opacity-30 transition">
+                        <i class="fas fa-spell-check"></i>
+                    </button>
+                    <button id="aiAssist" class="bg-white bg-opacity-20 px-3 py-2 rounded-lg hover:bg-opacity-30 transition">
+                        <i class="fas fa-magic"></i> IA
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <!-- Editor Principal -->
+            <div class="lg:col-span-3">
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-2xl font-semibold text-gray-800">
+                            <i class="fas fa-file-alt mr-2 text-purple-600"></i>
+                            Editor de Texto
+                        </h2>
+                        <div class="flex items-center space-x-2">
+                            <button id="undoBtn" class="text-gray-600 hover:text-gray-800">
+                                <i class="fas fa-undo"></i>
+                            </button>
+                            <button id="redoBtn" class="text-gray-600 hover:text-gray-800">
+                                <i class="fas fa-redo"></i>
+                            </button>
+                            <button id="fullscreenBtn" class="text-gray-600 hover:text-gray-800">
+                                <i class="fas fa-expand"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Barra de Ferramentas -->
+                    <div class="mb-4 flex items-center space-x-4">
+                        <select id="fontFamily" class="px-3 py-2 border border-gray-300 rounded-lg">
+                            <option value="Arial">Arial</option>
+                            <option value="Times New Roman">Times New Roman</option>
+                            <option value="Georgia">Georgia</option>
+                            <option value="Verdana">Verdana</option>
+                        </select>
+                        <select id="fontSize" class="px-3 py-2 border border-gray-300 rounded-lg">
+                            <option value="12px">12px</option>
+                            <option value="14px">14px</option>
+                            <option value="16px" selected>16px</option>
+                            <option value="18px">18px</option>
+                            <option value="20px">20px</option>
+                            <option value="24px">24px</option>
+                        </select>
+                        <div class="flex items-center space-x-2">
+                            <button id="boldBtn" class="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100">
+                                <i class="fas fa-bold"></i>
+                            </button>
+                            <button id="italicBtn" class="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100">
+                                <i class="fas fa-italic"></i>
+                            </button>
+                            <button id="underlineBtn" class="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100">
+                                <i class="fas fa-underline"></i>
+                            </button>
+                        </div>
+                        <input type="color" id="textColor" class="w-10 h-10 border border-gray-300 rounded cursor-pointer">
+                    </div>
+                    
+                    <!-- Editor Quill -->
+                    <div id="editor"></div>
+                    
+                    <!-- Barra de Status -->
+                    <div class="mt-4 flex items-center justify-between text-sm text-gray-600">
+                        <span id="wordCount">0 palavras</span>
+                        <span id="charCount">0 caracteres</span>
+                        <span id="readingTime">0 min de leitura</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Painel Lateral -->
+            <div class="lg:col-span-1 space-y-6">
+                <!-- Estatísticas -->
+                <div class="stats-card rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold mb-4">
+                        <i class="fas fa-chart-bar mr-2"></i>
+                        Estatísticas
+                    </h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span>Palavras:</span>
+                            <span id="totalWords" class="font-bold">0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Caracteres:</span>
+                            <span id="totalChars" class="font-bold">0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Parágrafos:</span>
+                            <span id="totalParagraphs" class="font-bold">0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Tempo de leitura:</span>
+                            <span id="totalReadingTime" class="font-bold">0 min</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Nuvem de Palavras -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold mb-4 text-gray-800">
+                        <i class="fas fa-cloud mr-2 text-purple-600"></i>
+                        Palavras Chave
+                    </h3>
+                    <div id="wordCloud" class="word-cloud">
+                        <!-- Palavras serão adicionadas dinamicamente -->
+                    </div>
+                </div>
+
+                <!-- Modos de Leitura -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold mb-4 text-gray-800">
+                        <i class="fas fa-book-reader mr-2 text-purple-600"></i>
+                        Modos de Leitura
+                    </h3>
+                    <div class="space-y-2">
+                        <button class="w-full text-left px-4 py-2 rounded-lg hover:bg-purple-50 transition" data-mode="normal">
+                            <i class="fas fa-book mr-2"></i>Normal
+                        </button>
+                        <button class="w-full text-left px-4 py-2 rounded-lg hover:bg-purple-50 transition" data-mode="study">
+                            <i class="fas fa-graduation-cap mr-2"></i>Estudo
+                        </button>
+                        <button class="w-full text-left px-4 py-2 rounded-lg hover:bg-purple-50 transition" data-mode="presentation">
+                            <i class="fas fa-presentation mr-2"></i>Apresentação
+                        </button>
+                        <button class="w-full text-left px-4 py-2 rounded-lg hover:bg-purple-50 transition" data-mode="accessibility">
+                            <i class="fas fa-universal-access mr-2"></i>Acessibilidade
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controles de Áudio Avançados -->
+        <div class="mt-8 bg-white rounded-xl shadow-lg p-6">
+            <h3 class="text-2xl font-semibold mb-6 text-gray-800">
+                <i class="fas fa-sliders-h mr-2 text-purple-600"></i>
+                Controles de Áudio Avançados
+            </h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- Velocidade -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Velocidade</label>
+                    <input type="range" id="speedControl" min="0.5" max="2.0" step="0.1" value="1.0" class="w-full">
+                    <div class="flex justify-between text-xs text-gray-600">
+                        <span>0.5x</span>
+                        <span id="speedValue">1.0x</span>
+                        <span>2.0x</span>
+                    </div>
+                </div>
+
+                <!-- Pitch -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Tom (Pitch)</label>
+                    <input type="range" id="pitchControl" min="0.5" max="2.0" step="0.1" value="1.0" class="w-full">
+                    <div class="flex justify-between text-xs text-gray-600">
+                        <span>Grave</span>
+                        <span id="pitchValue">Normal</span>
+                        <span>Agudo</span>
+                    </div>
+                </div>
+
+                <!-- Volume -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Volume</label>
+                    <input type="range" id="volumeControl" min="0" max="1" step="0.1" value="1.0" class="w-full">
+                    <div class="flex justify-between text-xs text-gray-600">
+                        <span>0%</span>
+                        <span id="volumeValue">100%</span>
+                        <span>100%</span>
+                    </div>
+                </div>
+
+                <!-- Formato -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Formato</label>
+                    <select id="audioFormat" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                        <option value="mp3">MP3</option>
+                        <option value="wav">WAV</option>
+                        <option value="ogg">OGG</option>
+                        <option value="m4a">M4A</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Equalizador -->
+            <div class="mt-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Equalizador</label>
+                <div class="flex items-center space-x-4">
+                    <div class="flex-1">
+                        <input type="range" id="eqBass" min="-20" max="20" value="0" class="w-full">
+                        <div class="text-center text-xs text-gray-600">Graves</div>
+                    </div>
+                    <div class="flex-1">
+                        <input type="range" id="eqMid" min="-20" max="20" value="0" class="w-full">
+                        <div class="text-center text-xs text-gray-600">Médios</div>
+                    </div>
+                    <div class="flex-1">
+                        <input type="range" id="eqTreble" min="-20" max="20" value="0" class="w-full">
+                        <div class="text-center text-xs text-gray-600">Agudos</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Biblioteca Pessoal -->
+        <div class="mt-8 bg-white rounded-xl shadow-lg p-6">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-2xl font-semibold text-gray-800">
+                    <i class="fas fa-book-open mr-2 text-purple-600"></i>
+                    Minha Biblioteca
+                </h3>
+                <button id="addBookBtn" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition">
+                    <i class="fas fa-plus mr-2"></i>Adicionar Livro
+                </button>
+            </div>
+            
+            <div id="libraryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Livros serão adicionados dinamicamente -->
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white py-6 mt-12">
+        <div class="container mx-auto px-4 text-center">
+            <p class="text-sm opacity-75">© 2024 PDF para Áudio Avançado. Editor profissional com IA.</p>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // Inicialização do Quill Editor
+        const quill = new Quill('#editor', {
+            theme: 'snow',
+            modules: {
+                toolbar: [
+                    [{ 'header': [1, 2, 3, false] }],
+                    ['bold', 'italic', 'underline', 'strike'],
+                    ['blockquote', 'code-block'],
+                    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                    [{ 'script': 'sub'}, { 'script': 'super' }],
+                    [{ 'indent': '-1'}, { 'indent': '+1' }],
+                    [{ 'color': [] }, { 'background': [] }],
+                    [{ 'align': [] }],
+                    ['clean']
+                ]
+            }
+        });
+
+        // Variáveis globais
+        let currentTheme = 'light';
+        let readingMode = 'normal';
+        let library = JSON.parse(localStorage.getItem('library') || '[]');
+
+        // Atualização de estatísticas em tempo real
+        function updateStats() {
+            const text = quill.getText();
+            const words = text.trim().split(/\s+/).filter(word => word.length > 0);
+            const paragraphs = text.split(/\n\n+/).filter(p => p.trim().length > 0);
+            
+            const wordCount = words.length;
+            const charCount = text.length;
+            const readingTime = Math.ceil(wordCount / 200); // 200 palavras por minuto
+            
+            document.getElementById('wordCount').textContent = `${wordCount} palavras`;
+            document.getElementById('charCount').textContent = `${charCount} caracteres`;
+            document.getElementById('readingTime').textContent = `${readingTime} min de leitura`;
+            
+            document.getElementById('totalWords').textContent = wordCount;
+            document.getElementById('totalChars').textContent = charCount;
+            document.getElementById('totalParagraphs').textContent = paragraphs.length;
+            document.getElementById('totalReadingTime').textContent = `${readingTime} min`;
+            
+            updateWordCloud(words);
+        }
+
+        // Nuvem de palavras
+        function updateWordCloud(words) {
+            const wordFreq = {};
+            words.forEach(word => {
+                const cleanWord = word.toLowerCase().replace(/[^\w\s]/gi, '');
+                if (cleanWord.length > 3) {
+                    wordFreq[cleanWord] = (wordFreq[cleanWord] || 0) + 1;
+                }
+            });
+            
+            const sortedWords = Object.entries(wordFreq)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 15);
+            
+            const wordCloud = document.getElementById('wordCloud');
+            wordCloud.innerHTML = sortedWords.map(([word, freq]) => {
+                const size = Math.min(freq * 2 + 12, 24);
+                return `<span class="word-tag" style="font-size: ${size}px">${word}</span>`;
+            }).join('');
+        }
+
+        // Controle de tema
+        document.getElementById('themeToggle').addEventListener('click', () => {
+            currentTheme = currentTheme === 'light' ? 'dark' : 'light';
+            document.body.classList.toggle('theme-dark');
+            document.getElementById('themeToggle').innerHTML = 
+                currentTheme === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+        });
+
+        // Controles de formatação
+        document.getElementById('fontFamily').addEventListener('change', (e) => {
+            const fontFamily = e.target.value;
+            quill.format('font', fontFamily);
+        });
+
+        document.getElementById('fontSize').addEventListener('change', (e) => {
+            const fontSize = e.target.value;
+            quill.format('size', fontSize);
+        });
+
+        document.getElementById('textColor').addEventListener('change', (e) => {
+            quill.format('color', e.target.value);
+        });
+
+        // Botões de formatação
+        document.getElementById('boldBtn').addEventListener('click', () => quill.format('bold', !quill.getFormat().bold));
+        document.getElementById('italicBtn').addEventListener('click', () => quill.format('italic', !quill.getFormat().italic));
+        document.getElementById('underlineBtn').addEventListener('click', () => quill.format('underline', !quill.getFormat().underline));
+
+        // Controles de áudio
+        document.getElementById('speedControl').addEventListener('input', (e) => {
+            document.getElementById('speedValue').textContent = e.target.value + 'x';
+        });
+
+        document.getElementById('pitchControl').addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            const label = value < 0.8 ? 'Grave' : value > 1.2 ? 'Agudo' : 'Normal';
+            document.getElementById('pitchValue').textContent = label;
+        });
+
+        document.getElementById('volumeControl').addEventListener('input', (e) => {
+            document.getElementById('volumeValue').textContent = Math.round(e.target.value * 100) + '%';
+        });
+
+        // Modos de leitura
+        document.querySelectorAll('[data-mode]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                readingMode = e.target.closest('button').dataset.mode;
+                applyReadingMode(readingMode);
+            });
+        });
+
+        function applyReadingMode(mode) {
+            const editor = document.querySelector('#editor .ql-container');
+            switch(mode) {
+                case 'study':
+                    editor.style.fontSize = '18px';
+                    editor.style.lineHeight = '1.8';
+                    editor.style.backgroundColor = '#fff9e6';
+                    break;
+                case 'presentation':
+                    editor.style.fontSize = '24px';
+                    editor.style.lineHeight = '1.6';
+                    editor.style.backgroundColor = '#f0f9ff';
+                    break;
+                case 'accessibility':
+                    editor.style.fontSize = '20px';
+                    editor.style.lineHeight = '2.0';
+                    editor.style.backgroundColor = '#ffffff';
+                    editor.style.color = '#000000';
+                    break;
+                default:
+                    editor.style.fontSize = '16px';
+                    editor.style.lineHeight = '1.6';
+                    editor.style.backgroundColor = '#ffffff';
+            }
+        }
+
+        // Biblioteca pessoal
+        function renderLibrary() {
+            const grid = document.getElementById('libraryGrid');
+            grid.innerHTML = library.map((book, index) => `
+                <div class="bg-gray-50 rounded-lg p-4 hover:shadow-lg transition">
+                    <div class="flex items-start justify-between mb-2">
+                        <h4 class="font-semibold text-gray-800">${book.title}</h4>
+                        <button onclick="removeBook(${index})" class="text-red-500 hover:text-red-700">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-2">${book.author}</p>
+                    <p class="text-xs text-gray-500 mb-3">${book.words} palavras</p>
+                    <div class="flex space-x-2">
+                        <button onclick="editBook(${index})" class="text-blue-500 hover:text-blue-700 text-sm">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button onclick="playBook(${index})" class="text-green-500 hover:text-green-700 text-sm">
+                            <i class="fas fa-play"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function addBook() {
+            const title = prompt('Título do livro:');
+            if (!title) return;
+            
+            const author = prompt('Autor:');
+            if (!author) return;
+            
+            const book = {
+                id: Date.now(),
+                title,
+                author,
+                content: quill.root.innerHTML,
+                words: quill.getText().split(/\s+/).length,
+                date: new Date().toISOString()
+            };
+            
+            library.push(book);
+            localStorage.setItem('library', JSON.stringify(library));
+            renderLibrary();
+        }
+
+        function removeBook(index) {
+            if (confirm('Remover este livro da biblioteca?')) {
+                library.splice(index, 1);
+                localStorage.setItem('library', JSON.stringify(library));
+                renderLibrary();
+            }
+        }
+
+        function editBook(index) {
+            const book = library[index];
+            quill.root.innerHTML = book.content;
+            updateStats();
+        }
+
+        document.getElementById('addBookBtn').addEventListener('click', addBook);
+
+        // Verificação ortográfica
+        document.getElementById('spellCheck').addEventListener('click', () => {
+            const text = quill.getText();
+            // Implementar verificação ortográfica básica
+            const words = text.split(/\s+/);
+            const misspelled = words.filter(word => word.length > 3 && !isCommonWord(word));
+            
+            if (misspelled.length > 0) {
+                alert(`Possíveis erros ortográficos: ${misspelled.slice(0, 5).join(', ')}`);
+            } else {
+                alert('Nenhum erro ortográfico encontrado!');
+            }
+        });
+
+        function isCommonWord(word) {
+            const commonWords = ['o', 'a', 'os', 'as', 'de', 'do', 'da', 'dos', 'das', 'em', 'no', 'na', 'nos', 'nas', 'por', 'para', 'com', 'sem', 'sob', 'sobre'];
+            return commonWords.includes(word.toLowerCase());
+        }
+
+        // Assistente IA
+        document.getElementById('aiAssist').addEventListener('click', () => {
+            const selection = quill.getSelection();
+            if (selection) {
+                const text = quill.getText(selection.index, selection.length);
+                // Simular sugestão de IA
+                const suggestions = [
+                    'Considere reestrurar esta frase para maior clareza.',
+                    'Adicione exemplos para ilustrar melhor este ponto.',
+                    'Verifique a concordância verbal e nominal.'
+                ];
+                const suggestion = suggestions[Math.floor(Math.random() * suggestions.length)];
+                alert(`Sugestão de IA: ${suggestion}`);
+            } else {
+                alert('Selecione um texto para receber sugestões da IA.');
+            }
+        });
+
+        // Event listeners
+        quill.on('text-change', updateStats);
+
+        // Inicialização
+        updateStats();
+        renderLibrary();
+
+        // Salvar automaticamente
+        setInterval(() => {
+            localStorage.setItem('editorContent', quill.root.innerHTML);
+        }, 30000); // Salvar a cada 30 segundos
+
+        // Restaurar conteúdo salvo
+        const savedContent = localStorage.getItem('editorContent');
+        if (savedContent) {
+            quill.root.innerHTML = savedContent;
+            updateStats();
+        }
+    </script>
+</body>
+</html>

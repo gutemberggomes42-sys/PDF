@@ -1,0 +1,39 @@
+=== PDF PARA ÁUDIO - INSTRUÇÕES RÁPIDAS ===
+
+1. INSTALAÇÃO (Windows):
+   - Duplo clique no arquivo start.bat
+   - Ou execute: python -m pip install -r requirements.txt
+
+2. EXECUÇÃO:
+   - Execute: python app.py
+   - Ou duplo clique em start.bat
+
+3. ACESSO:
+   - Abra o navegador
+   - Acesse: http://localhost:5000
+
+4. COMO USAR:
+   a) Arraste um arquivo PDF para a área indicada
+   b) Clique em "Converter para Áudio"
+   c) Aguarde o processamento
+   d) Reproduza ou baixe os arquivos de áudio
+
+5. REQUISITOS:
+   - Python 3.7 ou superior
+   - Conexão com internet
+   - Navegador web moderno
+
+6. LIMITE:
+   - Tamanho máximo do PDF: 50MB
+   - Formato suportado: PDF apenas
+
+7. PROBLEMAS COMUNS:
+   - Se der erro de Python: instale o Python do site python.org
+   - Se não extrair texto: verifique se o PDF não é imagem
+   - Se não converter (erro TTS):
+     * Verifique a conexão com internet
+     * Teste com um PDF menor
+     * Acesse http://localhost:5000/test-tts para testar
+     * Tente converter apenas algumas páginas do PDF
+
+=== PRONTO PARA USAR! ===

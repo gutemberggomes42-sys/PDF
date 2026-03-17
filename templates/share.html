@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>{{ title if title else 'Audiolivro' }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .audio-player { background: linear-gradient(135deg, #f6f8fb 0%, #e9ecef 100%); }
+        .track-active { border: 2px solid #8b5cf6; background-color: #f5f3ff; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <header class="bg-white shadow-sm">
+        <div class="container mx-auto px-4 py-5 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <i class="fas fa-book-open text-2xl text-purple-600"></i>
+                <div>
+                    <div id="shareTitle" class="text-lg font-bold text-gray-900">{{ title if title else 'Audiolivro' }}</div>
+                    <div class="text-xs text-gray-500">Link compartilhado</div>
+                </div>
+            </div>
+            <a href="/" class="text-sm text-purple-700 hover:text-purple-800 font-semibold">Criar o meu</a>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+        {% if not_found %}
+            <div class="max-w-3xl mx-auto bg-white rounded-xl shadow-lg p-8 text-center">
+                <i class="fas fa-link-slash text-5xl text-gray-400 mb-4"></i>
+                <h1 class="text-2xl font-bold text-gray-800 mb-2">Link inválido ou expirado</h1>
+                <p class="text-gray-600 mb-6">Peça um novo link para quem compartilhou este audiolivro.</p>
+                <a href="/" class="bg-purple-600 text-white px-5 py-3 rounded-lg font-semibold hover:bg-purple-700 transition">Voltar</a>
+            </div>
+        {% else %}
+            <div class="max-w-4xl mx-auto">
+                <section class="bg-white rounded-xl shadow-lg p-6 mb-6">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div class="text-sm text-gray-600">
+                            <span class="font-semibold text-gray-800">Como ouvir:</span>
+                            clique em uma faixa ou use o player abaixo.
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <a id="zipBtn" href="#" class="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition">
+                                <i class="fas fa-download mr-2"></i>Baixar ZIP
+                            </a>
+                            <a id="mergedBtn" href="#" class="hidden bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition">
+                                <i class="fas fa-file-audio mr-2"></i>Baixar mesclado
+                            </a>
+                            <a id="m4bBtn" href="#" class="hidden bg-purple-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-purple-700 transition">
+                                <i class="fas fa-headphones mr-2"></i>Baixar M4B
+                            </a>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <audio id="player" controls class="w-full audio-player rounded"></audio>
+                        <div id="nowPlaying" class="mt-2 text-sm text-gray-700"></div>
+                    </div>
+                </section>
+
+                <section class="bg-white rounded-xl shadow-lg p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-lg font-bold text-gray-800">Faixas</h2>
+                        <div id="statusBadge" class="text-xs text-gray-500"></div>
+                    </div>
+                    <div id="list" class="space-y-3"></div>
+                    <div id="empty" class="hidden text-sm text-gray-600">Nenhuma faixa disponível.</div>
+                </section>
+            </div>
+        {% endif %}
+    </main>
+
+    {% if not not_found %}
+    <script>
+        const SHARE_TOKEN = {{ share_token|tojson }};
+        const listEl = document.getElementById('list');
+        const emptyEl = document.getElementById('empty');
+        const player = document.getElementById('player');
+        const nowPlaying = document.getElementById('nowPlaying');
+        const zipBtn = document.getElementById('zipBtn');
+        const mergedBtn = document.getElementById('mergedBtn');
+        const m4bBtn = document.getElementById('m4bBtn');
+        const statusBadge = document.getElementById('statusBadge');
+        const shareTitle = document.getElementById('shareTitle');
+
+        function escapeHtml(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/\"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function setActiveTrack(idx) {
+            const rows = listEl ? listEl.querySelectorAll('[data-idx]') : [];
+            rows.forEach(el => {
+                if (parseInt(el.getAttribute('data-idx') || '-1', 10) === idx) el.classList.add('track-active');
+                else el.classList.remove('track-active');
+            });
+        }
+
+        function playItem(item, idx) {
+            const url = `/s/${encodeURIComponent(SHARE_TOKEN)}/play/${encodeURIComponent(item.filename)}?t=${Date.now()}`;
+            if (player) {
+                player.src = url;
+                try { player.load(); } catch (e) {}
+                try { player.play(); } catch (e) {}
+            }
+            if (nowPlaying) nowPlaying.textContent = item.display_label || item.filename || '';
+            setActiveTrack(idx);
+        }
+
+        async function loadShare() {
+            const r = await fetch(`/s/${encodeURIComponent(SHARE_TOKEN)}/data`, { cache: 'no-store' });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) {
+                if (emptyEl) {
+                    emptyEl.classList.remove('hidden');
+                    emptyEl.textContent = j.error || 'Link inválido.';
+                }
+                return;
+            }
+            if (shareTitle && j.title) shareTitle.textContent = j.title;
+            if (statusBadge) statusBadge.textContent = j.status ? `Status: ${j.status}` : '';
+            if (zipBtn && j.zip_url) zipBtn.href = j.zip_url;
+            if (mergedBtn) {
+                if (j.merged && j.merged_url) {
+                    mergedBtn.href = j.merged_url;
+                    mergedBtn.classList.remove('hidden');
+                } else {
+                    mergedBtn.classList.add('hidden');
+                }
+            }
+            if (m4bBtn) {
+                if (j.m4b_url) {
+                    m4bBtn.href = j.m4b_url;
+                    m4bBtn.classList.remove('hidden');
+                } else {
+                    m4bBtn.classList.add('hidden');
+                }
+            }
+            const items = Array.isArray(j.items) ? j.items : [];
+            if (!listEl) return;
+            listEl.innerHTML = '';
+            if (!items.length) {
+                if (emptyEl) emptyEl.classList.remove('hidden');
+                return;
+            }
+            if (emptyEl) emptyEl.classList.add('hidden');
+            items.forEach((it, idx) => {
+                const label = it.display_label || `Faixa ${idx + 1}`;
+                const row = document.createElement('div');
+                row.className = 'bg-gray-50 rounded-lg p-4 flex items-center justify-between gap-3';
+                row.setAttribute('data-idx', String(idx));
+                row.innerHTML = `
+                    <div class="min-w-0">
+                        <div class="font-semibold text-gray-800 truncate"><i class="fas fa-file-audio mr-2 text-purple-600"></i>${escapeHtml(label)}</div>
+                        <div class="text-xs text-gray-500 truncate">${escapeHtml(it.filename || '')}</div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button class="bg-purple-600 text-white px-3 py-2 rounded-lg font-semibold hover:bg-purple-700 transition" data-action="play">
+                            <i class="fas fa-play"></i>
+                        </button>
+                        <a class="bg-blue-600 text-white px-3 py-2 rounded-lg font-semibold hover:bg-blue-700 transition" href="/s/${encodeURIComponent(SHARE_TOKEN)}/download/${encodeURIComponent(it.filename)}">
+                            <i class="fas fa-download"></i>
+                        </a>
+                    </div>
+                `;
+                row.querySelector('[data-action="play"]').addEventListener('click', () => playItem(it, idx));
+                listEl.appendChild(row);
+            });
+        }
+
+        loadShare();
+    </script>
+    {% endif %}
+</body>
+</html>
