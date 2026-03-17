@@ -1,22 +1,12 @@
-const CACHE_NAME = 'pdf-audio-v2.0.1';
-const STATIC_CACHE = 'static-v2.0.1';
-const DYNAMIC_CACHE = 'dynamic-v2.0.1';
+const CACHE_NAME = 'pdf-audio-v3.0.0';
+const STATIC_CACHE = 'static-v3.0.0';
+const DYNAMIC_CACHE = 'dynamic-v3.0.0';
+const OFFLINE_AUDIO_CACHE = 'offline-audio-v1';
 
 // Arquivos estáticos para cache
 const STATIC_FILES = [
   '/',
-  '/index.html',
-  '/editor.html',
-  '/static/manifest.json',
-  '/static/css/style.css',
-  '/static/js/app.js',
-  '/static/icons/icon-192x192.png',
-  '/static/icons/icon-512x512.png',
-  'https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css',
-  'https://cdn.quilljs.com/1.3.6/quill.snow.css',
-  'https://cdn.quilljs.com/1.3.6/quill.js',
-  'https://cdn.jsdelivr.net/npm/chart.js'
+  '/static/manifest.json'
 ];
 
 // Instalação do Service Worker
@@ -66,130 +56,79 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
-  if (url.origin === self.location.origin) {
-    if (
-      url.pathname.startsWith('/play/') ||
-      url.pathname.startsWith('/download/') ||
-      url.pathname.startsWith('/status/') ||
-      url.pathname.startsWith('/merge-audio/') ||
-      url.pathname.startsWith('/download-merged/') ||
-      url.pathname.startsWith('/upload')
-    ) {
-      event.respondWith(fetch(request));
-      return;
-    }
+  if (request.method !== 'GET') {
+    event.respondWith(fetch(request));
+    return;
+  }
+
+  const isSameOrigin = url.origin === self.location.origin;
+  const isAudio = isSameOrigin && url.pathname.startsWith('/play/');
+  const isDownload = isSameOrigin && (url.pathname.startsWith('/download/') || url.pathname.startsWith('/download-') || url.pathname.startsWith('/api/conversions/'));
+  const isStatus = isSameOrigin && (url.pathname.startsWith('/status/') || url.pathname.startsWith('/api/'));
+  const isNav = request.mode === 'navigate' || (request.headers.get('accept') || '').includes('text/html');
+
+  if (isAudio || isDownload) {
+    event.respondWith(cacheFirst(request, isAudio ? OFFLINE_AUDIO_CACHE : DYNAMIC_CACHE));
+    return;
+  }
+
+  if (isStatus) {
+    event.respondWith(networkFirst(request, DYNAMIC_CACHE));
+    return;
   }
   
   // Estratégia de cache: Cache First para estáticos, Network First para dinâmicos
-  if (STATIC_FILES.includes(url.pathname) || 
-      url.origin === self.location.origin && 
-      (url.pathname.endsWith('.css') || 
-       url.pathname.endsWith('.js') || 
-       url.pathname.endsWith('.png') || 
-       url.pathname.endsWith('.jpg') || 
-       url.pathname.endsWith('.ico'))) {
-    
-    // Cache First para arquivos estáticos
-    event.respondWith(
-      caches.match(request)
-        .then((response) => {
-          if (response) {
-            return response;
-          }
-          
-          return fetch(request)
-            .then((response) => {
-              // Cache da resposta bem-sucedida
-              if (response.ok) {
-                const responseClone = response.clone();
-                caches.open(DYNAMIC_CACHE)
-                  .then((cache) => {
-                    cache.put(request, responseClone);
-                  });
-              }
-              return response;
-            })
-            .catch(() => {
-              // Fallback para offline
-              return new Response('Offline', {
-                status: 503,
-                statusText: 'Service Unavailable'
-              });
-            });
-        })
-    );
-  } else {
-    // Network First para requisições dinâmicas
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          // Cache de respostas GET bem-sucedidas
-          if (request.method === 'GET' && response.ok) {
-            const responseClone = response.clone();
-            caches.open(DYNAMIC_CACHE)
-              .then((cache) => {
-                cache.put(request, responseClone);
-              });
-          }
-          return response;
-        })
-        .catch(() => {
-          // Tentar obter do cache
-          return caches.match(request)
-            .then((response) => {
-              if (response) {
-                return response;
-              }
-              
-              // Fallback para página offline
-              if (request.headers.get('accept').includes('text/html')) {
-                return caches.match('/offline.html');
-              }
-              
-              return new Response('Offline', {
-                status: 503,
-                statusText: 'Service Unavailable'
-              });
-            });
-        })
-    );
+  if (isNav) {
+    event.respondWith(networkFirst(request, DYNAMIC_CACHE, '/'));
+    return;
   }
+
+  if (isSameOrigin && STATIC_FILES.includes(url.pathname)) {
+    event.respondWith(cacheFirst(request, STATIC_CACHE));
+    return;
+  }
+
+  event.respondWith(networkFirst(request, DYNAMIC_CACHE));
 });
 
-// Background Sync para sincronização quando online
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'sync-audio-files') {
-    event.waitUntil(syncAudioFiles());
-  }
-});
-
-// Sincronização de arquivos de áudio
-async function syncAudioFiles() {
+async function cacheFirst(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+  if (cached) return cached;
   try {
-    // Obter arquivos pendentes do IndexedDB
-    const pendingFiles = await getPendingFiles();
-    
-    for (const file of pendingFiles) {
-      try {
-        // Tentar upload quando online
-        const response = await fetch('/upload', {
-          method: 'POST',
-          body: file.data,
-          headers: file.headers
-        });
-        
-        if (response.ok) {
-          // Remover da lista de pendentes
-          await removePendingFile(file.id);
-        }
-      } catch (error) {
-        console.error('Erro no sync do arquivo:', error);
-      }
+    const resp = await fetch(request);
+    if (resp && resp.ok) {
+      cache.put(request, resp.clone());
     }
-  } catch (error) {
-    console.error('Erro na sincronização:', error);
+    return resp;
+  } catch (e) {
+    const fallback = await cache.match(request);
+    if (fallback) return fallback;
+    return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
   }
 }
+
+async function networkFirst(request, cacheName, fallbackPath) {
+  const cache = await caches.open(cacheName);
+  try {
+    const resp = await fetch(request);
+    if (resp && resp.ok) {
+      cache.put(request, resp.clone());
+    }
+    return resp;
+  } catch (e) {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    if (fallbackPath) {
+      const fb = await caches.match(fallbackPath);
+      if (fb) return fb;
+    }
+    return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+  }
+}
+
+self.addEventListener('sync', (event) => {
+});
 
 // Push notifications
 self.addEventListener('push', (event) => {

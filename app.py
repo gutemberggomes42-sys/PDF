@@ -1983,6 +1983,17 @@ def index():
     resp.headers['Content-Type'] = 'text/html; charset=utf-8'
     return resp
 
+@app.route('/sw.js')
+def service_worker():
+    p = os.path.join(app.root_path, 'static', 'sw.js')
+    resp = send_file(p, conditional=False)
+    resp.headers['Content-Type'] = 'application/javascript; charset=utf-8'
+    resp.headers['Service-Worker-Allowed'] = '/'
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
+
 @app.route('/demo/tts', methods=['POST'])
 def demo_tts():
     ip = request.remote_addr or 'unknown'

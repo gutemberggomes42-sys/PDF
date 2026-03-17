@@ -7,6 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>PDF para Áudio Avançado v3.0 - Enterprise Edition</title>
+    <link rel="manifest" href="/static/manifest.json">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
@@ -483,6 +484,10 @@
                         <i class="fas fa-download mr-2"></i>
                         Baixar pasta (ZIP)
                     </button>
+                    <button id="saveOfflineBtn" class="bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition duration-300">
+                        <i class="fas fa-cloud-download-alt mr-2"></i>
+                        Salvar offline
+                    </button>
                     <button id="mergeAudioBtn" class="bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 transition duration-300">
                         <i class="fas fa-compress-alt mr-2"></i>
                         Juntar Áudios
@@ -761,7 +766,17 @@
             try {
                 currentConversionId = conversionId;
                 showProgress();
-                const resp = await apiFetch(`/status/${conversionId}`);
+                let resp;
+                try {
+                    resp = await apiFetch(`/status/${conversionId}`);
+                } catch (e) {
+                    const off = loadOfflineManifest(conversionId);
+                    if (off) {
+                        showResults(off);
+                        return;
+                    }
+                    throw e;
+                }
                 if (!resp.ok) {
                     if (resp.status === 404) {
                         const meta = getActiveConversionMeta() || {};
@@ -773,6 +788,11 @@
                             startStatusCheck();
                             return;
                         }
+                    }
+                    const off = loadOfflineManifest(conversionId);
+                    if (off) {
+                        showResults(off);
+                        return;
                     }
                     clearActiveConversion();
                     return;
@@ -867,6 +887,7 @@
         const mergeAudioBtn = document.getElementById('mergeAudioBtn');
         const downloadMergedBtn = document.getElementById('downloadMergedBtn');
         const downloadM4bBtn = document.getElementById('downloadM4bBtn');
+        const saveOfflineBtn = document.getElementById('saveOfflineBtn');
         const zipProgressWrap = document.getElementById('zipProgressWrap');
         const zipProgressMsg = document.getElementById('zipProgressMsg');
         const zipProgressBar = document.getElementById('zipProgressBar');
@@ -1525,7 +1546,7 @@
                     const rowLabel = p.display_label || `Página ${pageNum}`;
                     let src = null;
                     if (p.storage && p.storage.signed_url) src = p.storage.signed_url;
-                    if (!src && fname) src = `/play/${conversionId}/${fname}?t=${Date.now()}`;
+                    if (!src && fname) src = `/play/${conversionId}/${fname}`;
                     const isWav = fname.toLowerCase().endsWith('.wav');
                     const mimeType = isWav ? 'audio/wav' : 'audio/mpeg';
                     parts.push(`
@@ -1573,7 +1594,7 @@
                 const fname = p.filename || '';
                 let src = null;
                 if (p.storage && p.storage.signed_url) src = p.storage.signed_url;
-                if (!src && fname) src = `/play/${conversionId}/${fname}?t=${Date.now()}`;
+                if (!src && fname) src = `/play/${conversionId}/${fname}`;
                 if (!src) continue;
                 libraryPlaylist.push({
                     page_number: p.page_number,
@@ -2486,7 +2507,7 @@
             
             currentTrackIndex = index;
             const track = playlist[index];
-            mainAudioPlayer.src = `/play/${currentConversionId}/${track.filename}?t=${Date.now()}`;
+            mainAudioPlayer.src = `/play/${currentConversionId}/${track.filename}`;
             mainAudioPlayer.load();
             const resumeAt = loadPlaybackPos(currentConversionId, track.filename);
             const applyResume = () => {
@@ -2937,7 +2958,7 @@
             div.setAttribute('data-track-index', String(trackIndex));
             const isWav = filename.toLowerCase().endsWith('.wav');
             const mimeType = isWav ? 'audio/wav' : 'audio/mpeg';
-            const srcUrl = `/play/${conversionId}/${filename}?t=${Date.now()}`;
+            const srcUrl = `/play/${conversionId}/${filename}`;
             
             div.innerHTML = `
                 <div class="flex items-center justify-between mb-3">
@@ -3130,6 +3151,105 @@
             setZipProgress(false);
         }
 
+        const OFFLINE_AUDIO_CACHE = 'offline-audio-v1';
+
+        async function ensureServiceWorker() {
+            try {
+                if (!('serviceWorker' in navigator)) return false;
+                const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+                try { await navigator.serviceWorker.ready; } catch (e) {}
+                return !!reg;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function normalizeOfflineUrl(u) {
+            const s = String(u || '');
+            return s.replace(/\?t=\d+$/, '');
+        }
+
+        async function cacheAudioForOffline(conversionId) {
+            if (!('caches' in window)) throw new Error('Offline não suportado neste navegador.');
+            await ensureServiceWorker();
+            setZipProgress(true, 'Preparando offline...', 0);
+
+            const resp = await apiFetch(`/status/${conversionId}?t=${Date.now()}`);
+            const st = await resp.json().catch(() => ({}));
+            const pages = st.pages_info || [];
+            if (!pages || !pages.length) throw new Error('Nenhum áudio encontrado para salvar offline.');
+
+            const urls = [];
+            const manifest = [];
+            for (const p of pages) {
+                const fn = p && p.filename ? String(p.filename) : '';
+                if (!fn) continue;
+                urls.push(normalizeOfflineUrl(`/play/${conversionId}/${encodeURIComponent(fn)}`));
+                manifest.push({ filename: fn, display_label: p.display_label || '', page_number: p.page_number || null });
+            }
+            if (!urls.length) throw new Error('Nenhum áudio encontrado para salvar offline.');
+
+            const cache = await caches.open(OFFLINE_AUDIO_CACHE);
+            const total = urls.length;
+            for (let i = 0; i < urls.length; i++) {
+                const url = urls[i];
+                const pct = Math.floor((i / total) * 100);
+                setZipProgress(true, `Salvando offline... ${i}/${total}`, pct);
+                const req = new Request(url, { method: 'GET', cache: 'no-store' });
+                const existing = await cache.match(req);
+                if (existing) continue;
+                const r = await fetch(req);
+                if (!r.ok) throw new Error(`Falha ao baixar áudio (HTTP ${r.status})`);
+                await cache.put(req, r.clone());
+            }
+
+            const title = st.book_title || st.filename || 'audiobook';
+            const key = 'offline_conversions';
+            let list = [];
+            try { list = JSON.parse(localStorage.getItem(key) || '[]') || []; } catch (e) { list = []; }
+            list = list.filter(x => x && x.id !== conversionId);
+            list.unshift({ id: conversionId, title, count: total, saved_at: Date.now() });
+            try { localStorage.setItem(key, JSON.stringify(list.slice(0, 20))); } catch (e) {}
+            try { localStorage.setItem(`offline_manifest_${conversionId}`, JSON.stringify({ title, pages: manifest })); } catch (e) {}
+
+            setZipProgress(true, 'Offline pronto! Você pode ouvir sem internet.', 100);
+            setTimeout(() => setZipProgress(false), 1200);
+        }
+
+        function loadOfflineManifest(conversionId) {
+            try {
+                const raw = localStorage.getItem(`offline_manifest_${conversionId}`) || '';
+                if (!raw) return null;
+                const j = JSON.parse(raw);
+                const pages = (j && j.pages) ? j.pages : null;
+                if (!pages || !pages.length) return null;
+                return {
+                    status: 'completed',
+                    conversion_id: conversionId,
+                    book_title: j.title || 'Offline',
+                    pages_info: pages
+                };
+            } catch (e) {
+                return null;
+            }
+        }
+
+        if (saveOfflineBtn) {
+            saveOfflineBtn.addEventListener('click', async () => {
+                try {
+                    if (serverRequireAuth && !authToken) {
+                        showAuthModal();
+                        return;
+                    }
+                    if (!currentConversionId) throw new Error('Nenhuma conversão ativa.');
+                    await cacheAudioForOffline(currentConversionId);
+                } catch (e) {
+                    setZipProgress(false);
+                    showError(e && e.message ? e.message : 'Erro ao salvar offline');
+                }
+            });
+        }
+
         document.getElementById('downloadAllBtn').addEventListener('click', async () => {
             try {
                 if (statusCheckInterval) clearInterval(statusCheckInterval);
@@ -3195,6 +3315,13 @@
             isPlaying = false;
             mainAudioPlayer.src = '';
         }
+
+        (async () => {
+            try {
+                await ensureServiceWorker();
+            } catch (e) {
+            }
+        })();
     </script>
 </body>
 </html>
