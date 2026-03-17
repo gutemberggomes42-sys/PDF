@@ -21,6 +21,7 @@ import wave
 import random
 import secrets
 import subprocess
+import re
 try:
     import firebase_admin
     from firebase_admin import credentials as firebase_credentials
@@ -1442,13 +1443,19 @@ def tts_to_file_with_alignment(text, out_path, lang='pt', speed=1.0, voice_type=
         postprocess_audio_file(p, normalize_audio=normalize_audio, trim_silence=trim_silence)
     return {'path': p, 'alignment': None}
 
-def extract_text_from_file(file_path, file_type):
+def extract_text_from_file(file_path, file_type, options=None):
     """Extract text from different file types"""
     pages_text = []
+    if options is None:
+        options = {}
+    if not isinstance(options, dict):
+        options = {}
     
     try:
         if file_type == 'pdf':
-            return extract_text_from_pdf_page_by_page(file_path)
+            lang = str(options.get('lang') or 'pt').strip().lower()
+            use_ocr = bool(options.get('use_ocr', False))
+            return extract_text_from_pdf_page_by_page(file_path, lang=lang, use_ocr=use_ocr)
         
         elif file_type == 'docx':
             if not docx:
@@ -1557,18 +1564,95 @@ def save_to_cache(file_hash, options, result_data):
         pass
 
 def extract_text_from_pdf_page_by_page(pdf_path):
+    return extract_text_from_pdf_page_by_page(pdf_path, lang='pt', use_ocr=False)
+
+def _tesseract_lang_for(lang):
+    l = (lang or '').strip().lower()
+    mapping = {
+        'pt': 'por',
+        'pt-br': 'por',
+        'en': 'eng',
+        'es': 'spa',
+        'fr': 'fra',
+        'de': 'deu',
+        'it': 'ita',
+        'ru': 'rus',
+        'zh': 'chi_sim',
+        'ja': 'jpn'
+    }
+    return mapping.get(l, 'eng')
+
+def _ocr_available():
+    if not pytesseract or not Image:
+        return False
+    try:
+        return bool(shutil.which('tesseract'))
+    except Exception:
+        return False
+
+def _pdf_ocr_available():
+    if not _ocr_available():
+        return False
+    try:
+        return bool(shutil.which('pdftoppm'))
+    except Exception:
+        return False
+
+def _ocr_pdf_page_text(pdf_path, page_number, lang):
+    if not _pdf_ocr_available():
+        return ''
+    ocr_lang = _tesseract_lang_for(lang)
+    with tempfile.TemporaryDirectory() as td:
+        out_base = os.path.join(td, f"page_{int(page_number)}")
+        cmd = ['pdftoppm', '-f', str(int(page_number)), '-l', str(int(page_number)), '-singlefile', '-png', pdf_path, out_base]
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        img_path = out_base + '.png'
+        if not os.path.exists(img_path):
+            return ''
+        img = Image.open(img_path)
+        try:
+            txt = pytesseract.image_to_string(img, lang=ocr_lang, config='--psm 6')
+        finally:
+            try:
+                img.close()
+            except Exception:
+                pass
+        return (txt or '').strip()
+
+def extract_text_from_pdf_page_by_page(pdf_path, lang='pt', use_ocr=False):
     pages_text = []
     try:
         with open(pdf_path, 'rb') as file:
             pdf_reader = PyPDF2.PdfReader(file)
-            for page_num in range(len(pdf_reader.pages)):
+            page_count = len(pdf_reader.pages)
+            for page_num in range(page_count):
                 page = pdf_reader.pages[page_num]
-                page_text = page.extract_text()
-                if page_text.strip():  # Only add pages with text
-                    pages_text.append({
-                        'page_number': page_num + 1,
-                        'text': page_text.strip()
-                    })
+                page_text = ''
+                try:
+                    page_text = page.extract_text() or ''
+                except Exception:
+                    page_text = ''
+                pages_text.append({
+                    'page_number': page_num + 1,
+                    'text': (page_text or '').strip()
+                })
+
+        non_empty = [p for p in pages_text if (p.get('text') or '').strip()]
+        if (not non_empty) and _pdf_ocr_available():
+            for p in pages_text:
+                p['text'] = _ocr_pdf_page_text(pdf_path, p.get('page_number') or 1, lang)
+            return pages_text
+
+        if use_ocr and _pdf_ocr_available():
+            min_chars = 15
+            for p in pages_text:
+                t = (p.get('text') or '').strip()
+                if len(t) >= min_chars:
+                    continue
+                ocr_t = _ocr_pdf_page_text(pdf_path, p.get('page_number') or 1, lang)
+                if len(ocr_t) > len(t):
+                    p['text'] = ocr_t
+
         return pages_text
     except Exception as e:
         raise Exception(f"Erro ao extrair texto do PDF: {str(e)}")
@@ -1768,24 +1852,52 @@ def text_to_speech_page(text, output_dir, page_number, lang='pt', speed=1.0, voi
         return None
 
 def clean_text_for_tts(text):
-    """Clean text to make it more suitable for TTS"""
-    import re
-    
-    # Remove excessive whitespace
-    text = re.sub(r'\s+', ' ', text)
-    
-    # Remove special characters that might cause issues
-    text = re.sub(r'[^\w\s\.\,\!\?\;\:\-\n\r]', '', text)
-    
-    # Remove very short lines (likely page numbers/headers)
-    lines = text.split('\n')
-    cleaned_lines = []
-    for line in lines:
-        line = line.strip()
-        if len(line) > 3:  # Keep lines with more than 3 characters
-            cleaned_lines.append(line)
-    
-    return ' '.join(cleaned_lines)
+    t = str(text or '')
+    if not t.strip():
+        return ''
+
+    t = t.replace('\r\n', '\n').replace('\r', '\n')
+    t = re.sub(r'[ \t\f\v]+', ' ', t)
+    t = re.sub(r'(\w)-\n(\w)', r'\1\2', t)
+
+    bullet_re = re.compile(r'^(\s*[\-\–—•\*]\s+|\s*\d{1,3}[\.\)]\s+|\s*[a-zA-Z][\.\)]\s+)')
+    drop_line_re = re.compile(r'^(?:\d{1,4}|(?i:(p[áa]gina|page))\s*\d{1,4})$')
+
+    parts = []
+    for para in re.split(r'\n{2,}', t):
+        raw_lines = [ln.strip() for ln in para.split('\n') if ln.strip()]
+        if not raw_lines:
+            continue
+        lines = []
+        for raw_ln in raw_lines:
+            if drop_line_re.fullmatch(raw_ln):
+                continue
+            is_bullet = bool(bullet_re.match(raw_ln))
+            ln = bullet_re.sub('', raw_ln, count=1) if is_bullet else raw_ln
+            ln = re.sub(r'[^\w\s\.\,\!\?\;\:\-\(\)\[\]\/%º°]', '', ln)
+            ln = re.sub(r'\s+', ' ', ln).strip()
+            if len(ln) <= 2:
+                continue
+            lines.append((ln, is_bullet))
+        if not lines:
+            continue
+
+        if any(flag for _, flag in lines):
+            for ln, _flag in lines:
+                if not re.search(r'[.!?]$', ln):
+                    ln += '.'
+                parts.append(ln)
+        else:
+            combined = ' '.join([ln for ln, _flag in lines])
+            combined = re.sub(r'\s+', ' ', combined).strip()
+            if combined and not re.search(r'[.!?]$', combined):
+                combined += '.'
+            if combined:
+                parts.append(combined)
+
+    out = ' '.join(parts).strip()
+    out = re.sub(r'\s+', ' ', out).strip()
+    return out
 
 @app.route('/')
 def index():
@@ -2226,7 +2338,7 @@ def process_pdf(conversion_id, pdf_path, options=None):
         )
         
         # Extract text page by page
-        pages_data = extract_text_from_file(pdf_path, file_type)
+        pages_data = extract_text_from_file(pdf_path, file_type, options=options)
         
         if not pages_data:
             processing_status[conversion_id]['status'] = 'error'
@@ -3436,7 +3548,7 @@ def extract_text_for_editing():
         try:
             # Extract text
             file_type = filename.rsplit('.', 1)[1].lower()
-            pages_data = extract_text_from_file(temp_path, file_type)
+            pages_data = extract_text_from_file(temp_path, file_type, options={'lang': 'pt', 'use_ocr': True})
             
             # Combine all text for editing
             full_text = '\n\n'.join([f"--- Página {page['page_number']} ---\n{page['text']}" for page in pages_data])

@@ -295,6 +295,10 @@
                                 <input id="trimSilenceToggle" type="checkbox" class="h-4 w-4">
                                 <span>Remover silêncio no começo/fim</span>
                             </label>
+                            <label class="flex items-center space-x-2 text-sm text-gray-700">
+                                <input id="useOcrToggle" type="checkbox" class="h-4 w-4">
+                                <span>Ativar OCR (PDF escaneado)</span>
+                            </label>
                         </div>
                     </div>
                     
@@ -840,6 +844,7 @@
         const splitModeSelect = document.getElementById('splitModeSelect');
         const normalizeToggle = document.getElementById('normalizeToggle');
         const trimSilenceToggle = document.getElementById('trimSilenceToggle');
+        const useOcrToggle = document.getElementById('useOcrToggle');
         const enhancedVoiceSelect = document.getElementById('enhancedVoiceSelect');
         const enhancedVoiceStatus = document.getElementById('enhancedVoiceStatus');
         const edgeVoiceSection = document.getElementById('edgeVoiceSection');
@@ -2210,7 +2215,8 @@
                         tts_voice: ttsVoiceSelect ? ttsVoiceSelect.value : '',
                         split_mode: splitModeSelect ? splitModeSelect.value : 'chapter',
                         normalize_audio: normalizeToggle && normalizeToggle.checked,
-                        trim_silence: trimSilenceToggle && trimSilenceToggle.checked
+                        trim_silence: trimSilenceToggle && trimSilenceToggle.checked,
+                        use_ocr: useOcrToggle && useOcrToggle.checked
                     }
                 };
                 const initResp = await apiFetch('/api/conversions/init', {
