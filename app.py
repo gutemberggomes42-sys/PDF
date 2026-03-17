@@ -224,7 +224,7 @@ EDGE_VOICES_CACHE = {
 
 FIRESTORE_CLIENT = None
 FIREBASE_STORAGE_BUCKET = os.environ.get('FIREBASE_STORAGE_BUCKET') or os.environ.get('FIREBASE_BUCKET') or ''
-REQUIRE_AUTH = os.environ.get('REQUIRE_AUTH', '1') not in ('0', 'false', 'False', 'off')
+REQUIRE_AUTH = os.environ.get('REQUIRE_AUTH', '0') not in ('0', 'false', 'False', 'off')
 
 def _firebase_init():
     global FIRESTORE_CLIENT
