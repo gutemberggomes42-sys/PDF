@@ -230,10 +230,13 @@ def _firebase_init():
     global FIRESTORE_CLIENT
     if not FIREBASE_ADMIN_AVAILABLE:
         return
+    svc_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT_JSON')
+    svc_file = os.environ.get('FIREBASE_SERVICE_ACCOUNT_FILE') or os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+    if not svc_json and not svc_file:
+        FIRESTORE_CLIENT = None
+        return
     try:
         if not firebase_admin._apps:
-            svc_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT_JSON')
-            svc_file = os.environ.get('FIREBASE_SERVICE_ACCOUNT_FILE') or os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
             if svc_json:
                 import json as _json
                 cred = firebase_credentials.Certificate(_json.loads(svc_json))
@@ -2582,6 +2585,19 @@ def get_status(conversion_id):
         st = (saved.get('status') or '').strip().lower()
         cs = (saved.get('control_status') or '').strip().lower()
         path = saved.get('source_local_path') or ''
+        if st == 'queued' and conversion_id not in processing_status and cs not in ('pause', 'cancel'):
+            if not path or not os.path.exists(path):
+                _db_upsert_conversion(conversion_id, status='error', message='Arquivo original não encontrado no servidor.')
+                saved = _db_get_conversion(conversion_id) or saved
+            else:
+                try:
+                    job = _db_get_job(conversion_id) or {}
+                    jst = (job.get('status') or '').strip().lower()
+                    if jst not in ('queued', 'running'):
+                        _db_upsert_job(conversion_id, status='queued', attempts=int(job.get('attempts') or 0), last_error=None)
+                    _start_job_worker()
+                except Exception:
+                    pass
         if st == 'processing' and conversion_id not in processing_status and cs not in ('pause', 'cancel'):
             if path and os.path.exists(path):
                 options = saved.get('options') or {}
