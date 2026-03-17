@@ -401,7 +401,7 @@ def _resolve_audio_path(conversion_id, p, filename=None):
 DB_BACKEND = (os.environ.get('DB_BACKEND') or '').strip().lower()
 DATABASE_URL = (os.environ.get('DATABASE_URL') or '').strip()
 DB_IS_POSTGRES = (DB_BACKEND == 'postgres') or (DATABASE_URL.startswith('postgres://') or DATABASE_URL.startswith('postgresql://'))
-if DB_IS_POSTGRES and DATABASE_URL and ('sslmode=' not in DATABASE_URL):
+if DB_IS_POSTGRES and DATABASE_URL and ('sslmode=' not in DATABASE_URL) and ('railway.internal' not in DATABASE_URL):
     DATABASE_URL = DATABASE_URL + ('&' if '?' in DATABASE_URL else '?') + 'sslmode=require'
 
 def _ph():
