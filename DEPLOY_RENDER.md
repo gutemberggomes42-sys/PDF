@@ -33,6 +33,16 @@ Se você quiser ativar login via Firebase depois:
   - `FIREBASE_SERVICE_ACCOUNT_FILE` (normalmente é melhor usar “Secret File” na Render)
   - `FIREBASE_STORAGE_BUCKET` (se usar Storage)
 
+## Banco PostgreSQL (recomendado)
+
+Se você criou um Postgres na Render, configure a variável de ambiente:
+
+- `DATABASE_URL` = string de conexão do Postgres
+
+Não coloque essa URL no Git. Configure somente no painel da Render em:
+
+- Settings → Environment → Add Environment Variable
+
 ## 5) Pastas e banco persistentes
 
 A Render cria um disco em `/data`:

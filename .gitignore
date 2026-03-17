@@ -20,6 +20,8 @@ temp/
 encrypted_files/
 app_data.db
 *.db
+*.db-wal
+*.db-shm
 
 android_app/app/build/
 android_app/.gradle/

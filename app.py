@@ -398,7 +398,23 @@ def _resolve_audio_path(conversion_id, p, filename=None):
                 continue
     return None
 
+DB_BACKEND = (os.environ.get('DB_BACKEND') or '').strip().lower()
+DATABASE_URL = (os.environ.get('DATABASE_URL') or '').strip()
+DB_IS_POSTGRES = (DB_BACKEND == 'postgres') or (DATABASE_URL.startswith('postgres://') or DATABASE_URL.startswith('postgresql://'))
+if DB_IS_POSTGRES and DATABASE_URL and ('sslmode=' not in DATABASE_URL):
+    DATABASE_URL = DATABASE_URL + ('&' if '?' in DATABASE_URL else '?') + 'sslmode=require'
+
+def _ph():
+    return '%s' if DB_IS_POSTGRES else '?'
+
+def _ph_list(n):
+    return ','.join([_ph()] * int(n))
+
 def _db_connect():
+    if DB_IS_POSTGRES:
+        import psycopg
+        from psycopg.rows import dict_row
+        return psycopg.connect(DATABASE_URL, row_factory=dict_row)
     conn = sqlite3.connect(app.config['DB_PATH'], check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA journal_mode=WAL')
@@ -413,121 +429,205 @@ def _db_init():
     with DB_LOCK:
         conn = _db_connect()
         try:
-            conn.execute(
-                '''
-                CREATE TABLE IF NOT EXISTS conversions (
-                    conversion_id TEXT PRIMARY KEY,
-                    source_filename TEXT,
-                    source_type TEXT,
-                    book_title TEXT,
-                    user_uid TEXT,
-                    user_email TEXT,
-                    user_name TEXT,
-                    created_at TEXT,
-                    updated_at TEXT,
-                    status TEXT,
-                    progress INTEGER,
-                    message TEXT,
-                    options_json TEXT,
-                    chapters_json TEXT,
-                    from_cache INTEGER DEFAULT 0,
-                    from_edited_text INTEGER DEFAULT 0,
-                    source_storage TEXT,
-                    source_local_path TEXT,
-                    control_status TEXT,
-                    merged_file TEXT,
-                    merged_storage TEXT,
-                    merge_status TEXT,
-                    merge_progress INTEGER,
-                    merge_message TEXT,
-                    client_ip TEXT,
-                    user_agent TEXT
+            if DB_IS_POSTGRES:
+                conn.execute(
+                    '''
+                    CREATE TABLE IF NOT EXISTS conversions (
+                        conversion_id TEXT PRIMARY KEY,
+                        source_filename TEXT,
+                        source_type TEXT,
+                        book_title TEXT,
+                        user_uid TEXT,
+                        user_email TEXT,
+                        user_name TEXT,
+                        created_at TEXT,
+                        updated_at TEXT,
+                        status TEXT,
+                        progress INTEGER,
+                        message TEXT,
+                        options_json TEXT,
+                        chapters_json TEXT,
+                        from_cache INTEGER DEFAULT 0,
+                        from_edited_text INTEGER DEFAULT 0,
+                        source_storage TEXT,
+                        source_local_path TEXT,
+                        control_status TEXT,
+                        merged_file TEXT,
+                        merged_storage TEXT,
+                        merge_status TEXT,
+                        merge_progress INTEGER,
+                        merge_message TEXT,
+                        client_ip TEXT,
+                        user_agent TEXT,
+                        share_token TEXT,
+                        share_enabled INTEGER,
+                        share_expires_at TEXT
+                    )
+                    '''
                 )
-                '''
-            )
-            conn.execute(
-                '''
-                CREATE TABLE IF NOT EXISTS pages (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    conversion_id TEXT NOT NULL,
-                    page_number INTEGER NOT NULL,
-                    filename TEXT,
-                    full_path TEXT,
-                    display_label TEXT,
-                    text TEXT,
-                    alignment_json TEXT,
-                    text_length INTEGER,
-                    created_at TEXT,
-                    UNIQUE(conversion_id, page_number),
-                    FOREIGN KEY(conversion_id) REFERENCES conversions(conversion_id) ON DELETE CASCADE
+                conn.execute(
+                    '''
+                    CREATE TABLE IF NOT EXISTS pages (
+                        id BIGSERIAL PRIMARY KEY,
+                        conversion_id TEXT NOT NULL,
+                        page_number INTEGER NOT NULL,
+                        filename TEXT,
+                        full_path TEXT,
+                        display_label TEXT,
+                        text TEXT,
+                        alignment_json TEXT,
+                        text_length INTEGER,
+                        created_at TEXT,
+                        UNIQUE(conversion_id, page_number)
+                    )
+                    '''
                 )
-                '''
-            )
-            conn.execute('CREATE INDEX IF NOT EXISTS idx_pages_conversion ON pages(conversion_id)')
-            conn.execute(
-                '''
-                CREATE TABLE IF NOT EXISTS upload_sessions (
-                    conversion_id TEXT PRIMARY KEY,
-                    user_uid TEXT,
-                    filename TEXT,
-                    temp_path TEXT,
-                    total_size INTEGER,
-                    received_size INTEGER,
-                    created_at TEXT,
-                    updated_at TEXT
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_pages_conversion ON pages(conversion_id)')
+                conn.execute(
+                    '''
+                    CREATE TABLE IF NOT EXISTS upload_sessions (
+                        conversion_id TEXT PRIMARY KEY,
+                        user_uid TEXT,
+                        filename TEXT,
+                        temp_path TEXT,
+                        total_size BIGINT,
+                        received_size BIGINT,
+                        created_at TEXT,
+                        updated_at TEXT
+                    )
+                    '''
                 )
-                '''
-            )
-            conn.execute('CREATE INDEX IF NOT EXISTS idx_upload_sessions_user ON upload_sessions(user_uid)')
-            conn.execute(
-                '''
-                CREATE TABLE IF NOT EXISTS conversion_jobs (
-                    conversion_id TEXT PRIMARY KEY,
-                    status TEXT,
-                    attempts INTEGER,
-                    last_error TEXT,
-                    created_at TEXT,
-                    updated_at TEXT
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_upload_sessions_user ON upload_sessions(user_uid)')
+                conn.execute(
+                    '''
+                    CREATE TABLE IF NOT EXISTS conversion_jobs (
+                        conversion_id TEXT PRIMARY KEY,
+                        status TEXT,
+                        attempts INTEGER,
+                        last_error TEXT,
+                        created_at TEXT,
+                        updated_at TEXT
+                    )
+                    '''
                 )
-                '''
-            )
-            conn.execute('CREATE INDEX IF NOT EXISTS idx_conversion_jobs_status ON conversion_jobs(status)')
-            page_cols = [r['name'] for r in conn.execute("PRAGMA table_info(pages)").fetchall()]
-            if 'display_label' not in page_cols:
-                conn.execute("ALTER TABLE pages ADD COLUMN display_label TEXT")
-            if 'text' not in page_cols:
-                conn.execute("ALTER TABLE pages ADD COLUMN text TEXT")
-            if 'alignment_json' not in page_cols:
-                conn.execute("ALTER TABLE pages ADD COLUMN alignment_json TEXT")
-            cols = [r['name'] for r in conn.execute("PRAGMA table_info(conversions)").fetchall()]
-            if 'book_title' not in cols:
-                conn.execute("ALTER TABLE conversions ADD COLUMN book_title TEXT")
-            if 'user_uid' not in cols:
-                conn.execute("ALTER TABLE conversions ADD COLUMN user_uid TEXT")
-            if 'user_email' not in cols:
-                conn.execute("ALTER TABLE conversions ADD COLUMN user_email TEXT")
-            if 'user_name' not in cols:
-                conn.execute("ALTER TABLE conversions ADD COLUMN user_name TEXT")
-            if 'chapters_json' not in cols:
-                conn.execute("ALTER TABLE conversions ADD COLUMN chapters_json TEXT")
-            if 'source_storage' not in cols:
-                conn.execute("ALTER TABLE conversions ADD COLUMN source_storage TEXT")
-            if 'source_local_path' not in cols:
-                conn.execute("ALTER TABLE conversions ADD COLUMN source_local_path TEXT")
-            if 'control_status' not in cols:
-                conn.execute("ALTER TABLE conversions ADD COLUMN control_status TEXT")
-            if 'merged_storage' not in cols:
-                conn.execute("ALTER TABLE conversions ADD COLUMN merged_storage TEXT")
-            if 'share_token' not in cols:
-                conn.execute("ALTER TABLE conversions ADD COLUMN share_token TEXT")
-            if 'share_enabled' not in cols:
-                conn.execute("ALTER TABLE conversions ADD COLUMN share_enabled INTEGER")
-            if 'share_expires_at' not in cols:
-                conn.execute("ALTER TABLE conversions ADD COLUMN share_expires_at TEXT")
-            try:
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_conversions_share_token ON conversions(share_token)")
-            except Exception:
-                pass
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_conversion_jobs_status ON conversion_jobs(status)')
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_conversions_share_token ON conversions(share_token)')
+            else:
+                conn.execute(
+                    '''
+                    CREATE TABLE IF NOT EXISTS conversions (
+                        conversion_id TEXT PRIMARY KEY,
+                        source_filename TEXT,
+                        source_type TEXT,
+                        book_title TEXT,
+                        user_uid TEXT,
+                        user_email TEXT,
+                        user_name TEXT,
+                        created_at TEXT,
+                        updated_at TEXT,
+                        status TEXT,
+                        progress INTEGER,
+                        message TEXT,
+                        options_json TEXT,
+                        chapters_json TEXT,
+                        from_cache INTEGER DEFAULT 0,
+                        from_edited_text INTEGER DEFAULT 0,
+                        source_storage TEXT,
+                        source_local_path TEXT,
+                        control_status TEXT,
+                        merged_file TEXT,
+                        merged_storage TEXT,
+                        merge_status TEXT,
+                        merge_progress INTEGER,
+                        merge_message TEXT,
+                        client_ip TEXT,
+                        user_agent TEXT
+                    )
+                    '''
+                )
+                conn.execute(
+                    '''
+                    CREATE TABLE IF NOT EXISTS pages (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        conversion_id TEXT NOT NULL,
+                        page_number INTEGER NOT NULL,
+                        filename TEXT,
+                        full_path TEXT,
+                        display_label TEXT,
+                        text TEXT,
+                        alignment_json TEXT,
+                        text_length INTEGER,
+                        created_at TEXT,
+                        UNIQUE(conversion_id, page_number),
+                        FOREIGN KEY(conversion_id) REFERENCES conversions(conversion_id) ON DELETE CASCADE
+                    )
+                    '''
+                )
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_pages_conversion ON pages(conversion_id)')
+                conn.execute(
+                    '''
+                    CREATE TABLE IF NOT EXISTS upload_sessions (
+                        conversion_id TEXT PRIMARY KEY,
+                        user_uid TEXT,
+                        filename TEXT,
+                        temp_path TEXT,
+                        total_size INTEGER,
+                        received_size INTEGER,
+                        created_at TEXT,
+                        updated_at TEXT
+                    )
+                    '''
+                )
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_upload_sessions_user ON upload_sessions(user_uid)')
+                conn.execute(
+                    '''
+                    CREATE TABLE IF NOT EXISTS conversion_jobs (
+                        conversion_id TEXT PRIMARY KEY,
+                        status TEXT,
+                        attempts INTEGER,
+                        last_error TEXT,
+                        created_at TEXT,
+                        updated_at TEXT
+                    )
+                    '''
+                )
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_conversion_jobs_status ON conversion_jobs(status)')
+                page_cols = [r['name'] for r in conn.execute("PRAGMA table_info(pages)").fetchall()]
+                if 'display_label' not in page_cols:
+                    conn.execute("ALTER TABLE pages ADD COLUMN display_label TEXT")
+                if 'text' not in page_cols:
+                    conn.execute("ALTER TABLE pages ADD COLUMN text TEXT")
+                if 'alignment_json' not in page_cols:
+                    conn.execute("ALTER TABLE pages ADD COLUMN alignment_json TEXT")
+                cols = [r['name'] for r in conn.execute("PRAGMA table_info(conversions)").fetchall()]
+                if 'book_title' not in cols:
+                    conn.execute("ALTER TABLE conversions ADD COLUMN book_title TEXT")
+                if 'user_uid' not in cols:
+                    conn.execute("ALTER TABLE conversions ADD COLUMN user_uid TEXT")
+                if 'user_email' not in cols:
+                    conn.execute("ALTER TABLE conversions ADD COLUMN user_email TEXT")
+                if 'user_name' not in cols:
+                    conn.execute("ALTER TABLE conversions ADD COLUMN user_name TEXT")
+                if 'chapters_json' not in cols:
+                    conn.execute("ALTER TABLE conversions ADD COLUMN chapters_json TEXT")
+                if 'source_storage' not in cols:
+                    conn.execute("ALTER TABLE conversions ADD COLUMN source_storage TEXT")
+                if 'source_local_path' not in cols:
+                    conn.execute("ALTER TABLE conversions ADD COLUMN source_local_path TEXT")
+                if 'control_status' not in cols:
+                    conn.execute("ALTER TABLE conversions ADD COLUMN control_status TEXT")
+                if 'merged_storage' not in cols:
+                    conn.execute("ALTER TABLE conversions ADD COLUMN merged_storage TEXT")
+                if 'share_token' not in cols:
+                    conn.execute("ALTER TABLE conversions ADD COLUMN share_token TEXT")
+                if 'share_enabled' not in cols:
+                    conn.execute("ALTER TABLE conversions ADD COLUMN share_enabled INTEGER")
+                if 'share_expires_at' not in cols:
+                    conn.execute("ALTER TABLE conversions ADD COLUMN share_expires_at TEXT")
+                try:
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_conversions_share_token ON conversions(share_token)")
+                except Exception:
+                    pass
             conn.commit()
         finally:
             conn.close()
@@ -562,7 +662,7 @@ def _db_upsert_conversion(conversion_id, **fields):
     base.update(fields)
     cols = list(base.keys())
     vals = [base[c] for c in cols]
-    placeholders = ','.join(['?'] * len(cols))
+    placeholders = _ph_list(len(cols))
     updates = ','.join([f"{c}=excluded.{c}" for c in cols if c != 'conversion_id'])
     with DB_LOCK:
         conn = _db_connect()
@@ -615,10 +715,11 @@ def _db_upsert_page(conversion_id, page_number, filename, full_path, text_length
     with DB_LOCK:
         conn = _db_connect()
         try:
+            ph = _ph_list(9)
             conn.execute(
-                '''
+                f'''
                 INSERT INTO pages (conversion_id, page_number, filename, full_path, display_label, text, alignment_json, text_length, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES ({ph})
                 ON CONFLICT(conversion_id, page_number) DO UPDATE SET
                     filename=excluded.filename,
                     full_path=excluded.full_path,
@@ -666,11 +767,11 @@ def _db_get_conversion(conversion_id):
     with DB_LOCK:
         conn = _db_connect()
         try:
-            row = conn.execute('SELECT * FROM conversions WHERE conversion_id=?', (conversion_id,)).fetchone()
+            row = conn.execute(f'SELECT * FROM conversions WHERE conversion_id={_ph()}', (conversion_id,)).fetchone()
             if not row:
                 return None
             pages = conn.execute(
-                'SELECT page_number, filename, full_path, display_label FROM pages WHERE conversion_id=? ORDER BY page_number ASC',
+                f'SELECT page_number, filename, full_path, display_label FROM pages WHERE conversion_id={_ph()} ORDER BY page_number ASC',
                 (conversion_id,)
             ).fetchall()
             d = dict(row)
@@ -703,7 +804,7 @@ def _db_get_pages_map(conversion_id):
         conn = _db_connect()
         try:
             rows = conn.execute(
-                'SELECT page_number, filename, full_path, display_label, alignment_json FROM pages WHERE conversion_id=?',
+                f'SELECT page_number, filename, full_path, display_label, alignment_json FROM pages WHERE conversion_id={_ph()}',
                 (conversion_id,)
             ).fetchall()
             out = {}
@@ -719,7 +820,7 @@ def _db_get_upload_session(conversion_id):
     with DB_LOCK:
         conn = _db_connect()
         try:
-            row = conn.execute('SELECT * FROM upload_sessions WHERE conversion_id=?', (conversion_id,)).fetchone()
+            row = conn.execute(f'SELECT * FROM upload_sessions WHERE conversion_id={_ph()}', (conversion_id,)).fetchone()
             return dict(row) if row else None
         finally:
             conn.close()
@@ -737,7 +838,7 @@ def _db_get_conversion_by_share_token(share_token):
     with DB_LOCK:
         conn = _db_connect()
         try:
-            row = conn.execute('SELECT * FROM conversions WHERE share_token=?', (share_token,)).fetchone()
+            row = conn.execute(f'SELECT * FROM conversions WHERE share_token={_ph()}', (share_token,)).fetchone()
             if not row:
                 return None
             d = dict(row)
@@ -752,7 +853,7 @@ def _db_get_conversion_by_share_token(share_token):
                 except Exception:
                     pass
             pages = conn.execute(
-                'SELECT page_number, filename, full_path, display_label FROM pages WHERE conversion_id=? ORDER BY page_number ASC',
+                f'SELECT page_number, filename, full_path, display_label FROM pages WHERE conversion_id={_ph()} ORDER BY page_number ASC',
                 (d.get('conversion_id'),)
             ).fetchall()
             d['pages_info'] = [dict(p) for p in pages]
@@ -770,7 +871,7 @@ def _db_upsert_upload_session(conversion_id, **fields):
     base.update(fields)
     cols = list(base.keys())
     vals = [base[c] for c in cols]
-    placeholders = ','.join(['?'] * len(cols))
+    placeholders = _ph_list(len(cols))
     updates = ','.join([f"{c}=excluded.{c}" for c in cols if c != 'conversion_id'])
     with DB_LOCK:
         conn = _db_connect()
@@ -790,7 +891,7 @@ def _db_delete_upload_session(conversion_id):
     with DB_LOCK:
         conn = _db_connect()
         try:
-            conn.execute('DELETE FROM upload_sessions WHERE conversion_id=?', (conversion_id,))
+            conn.execute(f'DELETE FROM upload_sessions WHERE conversion_id={_ph()}', (conversion_id,))
             conn.commit()
         finally:
             conn.close()
@@ -801,7 +902,7 @@ def _db_get_job(conversion_id):
     with DB_LOCK:
         conn = _db_connect()
         try:
-            row = conn.execute('SELECT * FROM conversion_jobs WHERE conversion_id=?', (conversion_id,)).fetchone()
+            row = conn.execute(f'SELECT * FROM conversion_jobs WHERE conversion_id={_ph()}', (conversion_id,)).fetchone()
             return dict(row) if row else None
         finally:
             conn.close()
@@ -816,7 +917,7 @@ def _db_upsert_job(conversion_id, **fields):
     base.update(fields)
     cols = list(base.keys())
     vals = [base[c] for c in cols]
-    placeholders = ','.join(['?'] * len(cols))
+    placeholders = _ph_list(len(cols))
     updates = ','.join([f"{c}=excluded.{c}" for c in cols if c != 'conversion_id'])
     with DB_LOCK:
         conn = _db_connect()
@@ -837,7 +938,7 @@ def _db_fetch_next_job():
         conn = _db_connect()
         try:
             row = conn.execute(
-                "SELECT * FROM conversion_jobs WHERE status='queued' ORDER BY datetime(created_at) ASC LIMIT 1"
+                "SELECT * FROM conversion_jobs WHERE status='queued' ORDER BY created_at ASC LIMIT 1"
             ).fetchone()
             return dict(row) if row else None
         finally:
@@ -849,7 +950,7 @@ def _db_delete_job(conversion_id):
     with DB_LOCK:
         conn = _db_connect()
         try:
-            conn.execute('DELETE FROM conversion_jobs WHERE conversion_id=?', (conversion_id,))
+            conn.execute(f'DELETE FROM conversion_jobs WHERE conversion_id={_ph()}', (conversion_id,))
             conn.commit()
         finally:
             conn.close()
@@ -867,7 +968,7 @@ def _resume_pending_conversions():
                 SELECT conversion_id, source_filename, book_title, created_at, progress, options_json, user_uid, source_local_path, status, control_status
                 FROM conversions
                 WHERE status IN ('processing','paused') AND (source_local_path IS NOT NULL AND source_local_path != '')
-                ORDER BY datetime(updated_at) DESC
+                ORDER BY updated_at DESC
                 LIMIT 3
                 '''
             ).fetchall()
@@ -2554,7 +2655,7 @@ def list_conversions():
             where_sql = ''
             params = []
             if uid:
-                where_sql = 'WHERE user_uid=?'
+                where_sql = f'WHERE user_uid={_ph()}'
                 params.append(uid)
             rows = conn.execute(
                 '''
@@ -2563,8 +2664,8 @@ def list_conversions():
                        merged_file, merge_status, merge_progress, merge_message
                 FROM conversions
                 ''' + where_sql + '''
-                ORDER BY datetime(created_at) DESC
-                LIMIT ? OFFSET ?
+                ORDER BY created_at DESC
+                LIMIT ''' + _ph() + ' OFFSET ' + _ph() + '''
                 ''',
                 (*params, limit_i, offset_i)
             ).fetchall()
@@ -3034,7 +3135,7 @@ def get_conversion_page_text(conversion_id, page_number):
         conn = _db_connect()
         try:
             row = conn.execute(
-                'SELECT display_label, text, alignment_json FROM pages WHERE conversion_id=? AND page_number=?',
+                f'SELECT display_label, text, alignment_json FROM pages WHERE conversion_id={_ph()} AND page_number={_ph()}',
                 (conversion_id, int(page_number))
             ).fetchone()
             if not row:
@@ -3128,7 +3229,7 @@ def delete_conversion(conversion_id):
     with DB_LOCK:
         conn = _db_connect()
         try:
-            conn.execute('DELETE FROM conversions WHERE conversion_id=?', (conversion_id,))
+            conn.execute(f'DELETE FROM conversions WHERE conversion_id={_ph()}', (conversion_id,))
             conn.commit()
         finally:
             conn.close()
