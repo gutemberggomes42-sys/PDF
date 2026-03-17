@@ -3309,6 +3309,14 @@ def auth_me():
         return auth_err
     return jsonify({'user': g.firebase_user})
 
+@app.route('/config')
+def public_config():
+    return jsonify({
+        'require_auth': bool(REQUIRE_AUTH),
+        'firebase_project_id': app.config.get('FIREBASE_PROJECT_ID', ''),
+        'firebase_auth_domain': 'conversao-de-livro-para-audio.firebaseapp.com'
+    })
+
 @app.route('/ffmpeg-status')
 def ffmpeg_status():
     _configure_ffmpeg()

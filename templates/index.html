@@ -537,6 +537,7 @@
         let isPlaying = false;
         let authToken = null;
         let authReady = false;
+        let serverRequireAuth = true;
         let showLoginTimer = null;
         let libraryPlaylist = [];
         let libraryCurrentIndex = 0;
@@ -713,7 +714,7 @@
             if (restoreInProgress) return;
             const conversionId = getActiveConversion();
             if (!conversionId) return;
-            if (!authToken) return;
+            if (serverRequireAuth && !authToken) return;
             restoreInProgress = true;
             try {
                 currentConversionId = conversionId;
@@ -935,7 +936,7 @@
                     authToken = null;
                 }
             }
-            if (resp.status === 401) {
+            if (resp.status === 401 && serverRequireAuth) {
                 showAuthModal('Faça login novamente para continuar.');
             }
             return resp;
@@ -977,7 +978,7 @@
             } catch (e) {
                 const code = e && e.code ? e.code : '';
                 if (code === 'auth/unauthorized-domain') {
-                    showAuthModal('Domínio não autorizado no Firebase. Adicione localhost/127.0.0.1/IP em Authentication > Settings > Authorized domains.');
+                    showAuthModal(`Domínio não autorizado no Firebase. Adicione ${window.location.host} em Firebase Console → Authentication → Settings → Authorized domains.`);
                 } else {
                     showAuthModal('Erro ao iniciar login com Google.');
                 }
@@ -998,14 +999,50 @@
             } catch (e) {
                 const code = e && e.code ? e.code : '';
                 if (code === 'auth/unauthorized-domain') {
-                    showAuthModal('Domínio não autorizado no Firebase. Adicione localhost/127.0.0.1/IP em Authentication > Settings > Authorized domains.');
+                    showAuthModal(`Domínio não autorizado no Firebase. Adicione ${window.location.host} em Firebase Console → Authentication → Settings → Authorized domains.`);
                 } else {
                     showAuthModal('Falha ao finalizar login com Google.');
                 }
             }
         })();
+
+        (async () => {
+            try {
+                const r = await fetch('/config', { cache: 'no-store' });
+                const j = await r.json().catch(() => ({}));
+                if (typeof j.require_auth === 'boolean') serverRequireAuth = j.require_auth;
+            } catch (e) {
+            } finally {
+                if (!serverRequireAuth) {
+                    try {
+                        if (showLoginTimer) clearTimeout(showLoginTimer);
+                    } catch (e) {
+                    }
+                    try {
+                        authToken = null;
+                        authReady = true;
+                        hideAuthModal();
+                        logoutBtn.classList.add('hidden');
+                        userLabel.textContent = '';
+                    } catch (e) {
+                    }
+                }
+            }
+        })();
         firebaseAuth.onAuthStateChanged(async (user) => {
             authReady = true;
+            if (!serverRequireAuth) {
+                authToken = null;
+                try {
+                    if (showLoginTimer) clearTimeout(showLoginTimer);
+                } catch (e) {
+                }
+                logoutBtn.classList.add('hidden');
+                userLabel.textContent = '';
+                hideAuthModal();
+                await restoreActiveConversion();
+                return;
+            }
             if (!user) {
                 authToken = null;
                 logoutBtn.classList.add('hidden');
@@ -1256,7 +1293,7 @@
                 ev.stopPropagation();
             } catch (e) {
             }
-            if (!authToken) {
+            if (serverRequireAuth && !authToken) {
                 showAuthModal();
                 return;
             }
@@ -2079,7 +2116,7 @@
         convertBtn.addEventListener('click', async () => {
             const file = fileInput.files[0];
             if (!file) return;
-            if (!authToken) {
+            if (serverRequireAuth && !authToken) {
                 showAuthModal();
                 return;
             }
