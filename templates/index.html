@@ -618,19 +618,51 @@
             while (received < file.size) {
                 const next = Math.min(file.size, received + chunkSize);
                 const blob = file.slice(received, next);
-                const resp = await apiFetch(`/api/upload/chunk/${conversionId}?offset=${received}&total=${file.size}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/octet-stream' },
-                    body: blob
-                });
+                let resp = null;
+                let lastErr = null;
+                for (let attempt = 1; attempt <= 5; attempt++) {
+                    try {
+                        resp = await apiFetch(`/api/upload/chunk/${conversionId}?offset=${received}&total=${file.size}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/octet-stream' },
+                            body: blob,
+                            timeoutMs: 120000
+                        });
+                        if (resp && (resp.status === 502 || resp.status === 503 || resp.status === 504)) {
+                            throw new Error(`HTTP ${resp.status}`);
+                        }
+                        break;
+                    } catch (e) {
+                        lastErr = e;
+                        const waitMs = Math.min(8000, 500 * Math.pow(2, attempt - 1));
+                        await new Promise(r => setTimeout(r, waitMs));
+                    }
+                }
+                if (!resp) {
+                    throw new Error(lastErr && lastErr.message ? lastErr.message : 'Falha ao enviar chunk');
+                }
                 if (resp.status === 409) {
                     const j = await resp.json().catch(() => ({}));
                     received = parseInt(j.received_size || '0', 10) || received;
                     continue;
                 }
                 if (!resp.ok) {
-                    const j = await resp.json().catch(() => ({}));
-                    throw new Error(j.error || 'Erro ao enviar parte do arquivo');
+                    let msg = '';
+                    try {
+                        const txt = await resp.text();
+                        msg = (txt || '').trim();
+                    } catch (e) {
+                        msg = '';
+                    }
+                    if (!msg) {
+                        msg = `HTTP ${resp.status}`;
+                    }
+                    try {
+                        const j = JSON.parse(msg);
+                        if (j && j.error) msg = j.error;
+                    } catch (e) {
+                    }
+                    throw new Error(msg);
                 }
                 const j = await resp.json().catch(() => ({}));
                 received = parseInt(j.received_size || String(next), 10) || next;

@@ -2043,65 +2043,70 @@ def upload_chunk(conversion_id):
     auth_err = _require_login()
     if auth_err:
         return auth_err
-    saved = _db_get_conversion(conversion_id)
-    if not saved:
-        return jsonify({'error': 'Conversão não encontrada'}), 404
-    uid = saved.get('user_uid')
-    if uid and g.firebase_user and uid != g.firebase_user.get('uid'):
-        return jsonify({'error': 'Conversão não encontrada'}), 404
-
     try:
-        offset = int(request.args.get('offset', '0'))
-    except Exception:
-        offset = 0
-    try:
-        total = int(request.args.get('total', '0'))
-    except Exception:
-        total = 0
+        saved = _db_get_conversion(conversion_id)
+        if not saved:
+            return jsonify({'error': 'Conversão não encontrada'}), 404
+        uid = saved.get('user_uid')
+        if uid and g.firebase_user and uid != g.firebase_user.get('uid'):
+            return jsonify({'error': 'Conversão não encontrada'}), 404
 
-    chunk = request.get_data(cache=False) or b''
-    if not chunk:
-        return jsonify({'error': 'Chunk vazio'}), 400
+        try:
+            offset = int(request.args.get('offset', '0'))
+        except Exception:
+            offset = 0
+        try:
+            total = int(request.args.get('total', '0'))
+        except Exception:
+            total = 0
 
-    sess = _db_get_upload_session(conversion_id)
-    if not sess:
-        fname = saved.get('source_filename') or 'upload.bin'
-        safe_fname = secure_filename(fname) or 'upload.bin'
-        tmp_path = os.path.join(app.config['UPLOAD_FOLDER'], f"upload_{secure_filename(conversion_id)}_{safe_fname}.part")
-        _db_upsert_upload_session(
-            conversion_id,
-            user_uid=g.firebase_user.get('uid') if g.firebase_user else None,
-            filename=safe_fname,
-            temp_path=tmp_path,
-            total_size=total if total > 0 else None,
-            received_size=0,
-            created_at=datetime.now().isoformat()
-        )
+        chunk = request.get_data(cache=False) or b''
+        if not chunk:
+            return jsonify({'error': 'Chunk vazio'}), 400
+
         sess = _db_get_upload_session(conversion_id)
+        if not sess:
+            fname = saved.get('source_filename') or 'upload.bin'
+            safe_fname = secure_filename(fname) or 'upload.bin'
+            tmp_path = os.path.join(app.config['UPLOAD_FOLDER'], f"upload_{secure_filename(conversion_id)}_{safe_fname}.part")
+            _db_upsert_upload_session(
+                conversion_id,
+                user_uid=g.firebase_user.get('uid') if g.firebase_user else None,
+                filename=safe_fname,
+                temp_path=tmp_path,
+                total_size=total if total > 0 else None,
+                received_size=0,
+                created_at=datetime.now().isoformat()
+            )
+            sess = _db_get_upload_session(conversion_id)
 
-    if sess and sess.get('user_uid') and g.firebase_user and sess.get('user_uid') != g.firebase_user.get('uid'):
-        return jsonify({'error': 'Conversão não encontrada'}), 404
+        if sess and sess.get('user_uid') and g.firebase_user and sess.get('user_uid') != g.firebase_user.get('uid'):
+            return jsonify({'error': 'Conversão não encontrada'}), 404
 
-    temp_path = sess.get('temp_path') or ''
-    received = int(sess.get('received_size') or 0)
-    expected_total = int(sess.get('total_size') or 0)
-    if total > 0 and expected_total != total:
-        expected_total = total
+        temp_path = sess.get('temp_path') or ''
+        received = int(sess.get('received_size') or 0)
+        expected_total = int(sess.get('total_size') or 0)
+        if total > 0 and expected_total != total:
+            expected_total = total
 
-    if offset != received:
-        return jsonify({'ok': True, 'received_size': received, 'total_size': expected_total}), 409
+        if offset != received:
+            return jsonify({'ok': True, 'received_size': received, 'total_size': expected_total}), 409
 
-    os.makedirs(os.path.dirname(temp_path), exist_ok=True)
-    try:
+        os.makedirs(os.path.dirname(temp_path), exist_ok=True)
         with open(temp_path, 'ab') as f:
             f.write(chunk)
-    except Exception as e:
-        return jsonify({'error': f'Erro ao gravar chunk: {str(e)}'}), 500
 
-    received += len(chunk)
-    _db_upsert_upload_session(conversion_id, received_size=received, total_size=expected_total or None)
-    _db_upsert_conversion(conversion_id, status='uploading', message=f'Enviando arquivo... {received}/{expected_total or 0}')
-    return jsonify({'ok': True, 'received_size': received, 'total_size': expected_total})
+        received += len(chunk)
+        _db_upsert_upload_session(conversion_id, received_size=received, total_size=expected_total or None)
+        _db_upsert_conversion(conversion_id, status='uploading', message=f'Enviando arquivo... {received}/{expected_total or 0}')
+        return jsonify({'ok': True, 'received_size': received, 'total_size': expected_total})
+    except Exception as e:
+        try:
+            import traceback
+            traceback.print_exc()
+        except Exception:
+            pass
+        return jsonify({'error': f'Erro no upload: {type(e).__name__}: {str(e)}'}), 500
 
 @app.route('/api/upload/complete/<conversion_id>', methods=['POST'])
 def upload_complete(conversion_id):
