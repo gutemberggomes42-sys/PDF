@@ -481,7 +481,7 @@
                 <div class="mt-6 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
                     <button id="downloadAllBtn" class="bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition duration-300">
                         <i class="fas fa-download mr-2"></i>
-                        Baixar Todos
+                        Baixar pasta (ZIP)
                     </button>
                     <button id="mergeAudioBtn" class="bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 transition duration-300">
                         <i class="fas fa-compress-alt mr-2"></i>
@@ -507,6 +507,12 @@
                         <i class="fas fa-plus mr-2"></i>
                         Nova Conversão
                     </button>
+                </div>
+                <div id="zipProgressWrap" class="hidden mt-4">
+                    <div id="zipProgressMsg" class="text-sm text-gray-700 mb-2"></div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div id="zipProgressBar" class="bg-green-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
                 </div>
             </section>
 
@@ -861,6 +867,9 @@
         const mergeAudioBtn = document.getElementById('mergeAudioBtn');
         const downloadMergedBtn = document.getElementById('downloadMergedBtn');
         const downloadM4bBtn = document.getElementById('downloadM4bBtn');
+        const zipProgressWrap = document.getElementById('zipProgressWrap');
+        const zipProgressMsg = document.getElementById('zipProgressMsg');
+        const zipProgressBar = document.getElementById('zipProgressBar');
         const followTextPanel = document.getElementById('followTextPanel');
         const followTextTitle = document.getElementById('followTextTitle');
         const followTextBody = document.getElementById('followTextBody');
@@ -3035,16 +3044,81 @@
             document.body.removeChild(a);
         }
 
-        async function downloadZip(conversionId, fallbackTitle) {
-            const response = await apiFetch(`/download-zip/${conversionId}?t=${Date.now()}`);
-            if (!response.ok) {
-                const j = await response.json().catch(() => ({}));
-                throw new Error(j.error || 'Erro ao baixar ZIP');
+        function setZipProgress(show, message, pct) {
+            if (!zipProgressWrap || !zipProgressMsg || !zipProgressBar) return;
+            if (!show) {
+                zipProgressWrap.classList.add('hidden');
+                zipProgressMsg.textContent = '';
+                zipProgressBar.style.width = '0%';
+                return;
             }
-            const blob = await response.blob();
-            const cd = response.headers.get('content-disposition') || '';
+            zipProgressWrap.classList.remove('hidden');
+            zipProgressMsg.textContent = message || '';
+            const p = Math.max(0, Math.min(100, parseInt(pct || '0', 10) || 0));
+            zipProgressBar.style.width = `${p}%`;
+        }
+
+        function xhrDownloadWithProgress(url, fallbackFilename) {
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', url, true);
+                xhr.responseType = 'blob';
+                try {
+                    if (serverRequireAuth && authToken) xhr.setRequestHeader('Authorization', `Bearer ${authToken}`);
+                } catch (e) {
+                }
+                xhr.onprogress = (ev) => {
+                    if (ev.lengthComputable) {
+                        const pct = Math.floor((ev.loaded / ev.total) * 100);
+                        setZipProgress(true, `Baixando ZIP... ${pct}%`, pct);
+                    } else {
+                        setZipProgress(true, 'Baixando ZIP...', 0);
+                    }
+                };
+                xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        const cd = xhr.getResponseHeader('content-disposition') || '';
+                        const filename = extractFilenameFromDisposition(cd, fallbackFilename || 'audios.zip');
+                        resolve({ blob: xhr.response, filename });
+                    } else {
+                        reject(new Error(`HTTP ${xhr.status}`));
+                    }
+                };
+                xhr.onerror = () => reject(new Error('Erro de conexão'));
+                xhr.send();
+            });
+        }
+
+        async function downloadZip(conversionId, fallbackTitle) {
             const fallback = `${(fallbackTitle || 'audiobook')}_audios.zip`;
-            const filename = extractFilenameFromDisposition(cd, fallback);
+            setZipProgress(true, 'Preparando ZIP...', 0);
+            const start = await apiFetch(`/api/conversions/${conversionId}/zip/start`, { method: 'POST' });
+            if (!start.ok) {
+                const j = await start.json().catch(() => ({}));
+                throw new Error(j.error || 'Erro ao iniciar ZIP');
+            }
+            let downloadUrl = null;
+            for (let i = 0; i < 600; i++) {
+                const stResp = await apiFetch(`/api/conversions/${conversionId}/zip/status?t=${Date.now()}`);
+                const st = await stResp.json().catch(() => ({}));
+                const s = (st.status || '').toLowerCase();
+                const pct = parseInt(st.progress || '0', 10) || 0;
+                const msg = st.message || (s === 'completed' ? 'ZIP pronto!' : 'Gerando ZIP...');
+                setZipProgress(true, msg, pct);
+                if (s === 'completed') {
+                    downloadUrl = st.download_url || null;
+                    break;
+                }
+                if (s === 'error') {
+                    throw new Error(st.message || 'Erro ao gerar ZIP');
+                }
+                await new Promise(r => setTimeout(r, 800));
+            }
+            if (!downloadUrl) {
+                throw new Error('Tempo excedido ao gerar ZIP');
+            }
+            setZipProgress(true, 'Baixando ZIP...', 0);
+            const { blob, filename } = await xhrDownloadWithProgress(`${downloadUrl}?t=${Date.now()}`, fallback);
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -3053,27 +3127,22 @@
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
+            setZipProgress(false);
         }
 
         document.getElementById('downloadAllBtn').addEventListener('click', async () => {
-            if (statusCheckInterval) {
-                clearInterval(statusCheckInterval);
+            try {
+                if (statusCheckInterval) clearInterval(statusCheckInterval);
+            } catch (e) {
             }
-            
-            const response = await apiFetch(`/status/${currentConversionId}`);
-            const status = await response.json();
-            
-            if (status.pages_info) {
-                for (const pageInfo of status.pages_info) {
-                    await downloadAudio(currentConversionId, pageInfo.filename);
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                }
-            } else if (status.audio_files) {
-                for (const file of status.audio_files) {
-                    const filename = file.split('/').pop();
-                    await downloadAudio(currentConversionId, filename);
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                }
+            try {
+                const resp = await apiFetch(`/status/${currentConversionId}`);
+                const st = await resp.json().catch(() => ({}));
+                const title = st.book_title || st.filename || 'audiobook';
+                await downloadZip(currentConversionId, title);
+            } catch (e) {
+                setZipProgress(false);
+                showError(e && e.message ? e.message : 'Erro ao baixar ZIP');
             }
         });
 

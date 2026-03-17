@@ -208,6 +208,9 @@ os.makedirs('temp', exist_ok=True)
 processing_status = {}
 DB_LOCK = threading.Lock()
 DEMO_RATE = {}
+ZIP_LOCK = threading.Lock()
+ZIP_STATUS = {}
+ZIP_TTL_S = 3600
 
 def _get_control_status(conversion_id):
     st = processing_status.get(conversion_id) or {}
@@ -1385,6 +1388,22 @@ def _run_with_timeout(fn, timeout_s):
 
 def tts_to_file(text, out_path, lang='pt', speed=1.0, voice_type='default', enhanced_voice='default', tts_engine='gtts', tts_voice=None, sapi_voice=None, use_offline=False):
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    if use_offline:
+        try:
+            if SAPI_AVAILABLE and str(lang).strip().lower().startswith('pt'):
+                out_dir = os.path.dirname(out_path)
+                tmp = text_to_speech_offline(text, out_dir, 0, voice_type=voice_type, sapi_voice=sapi_voice)
+                if tmp and os.path.exists(tmp):
+                    if tmp.lower().endswith('.wav') and out_path.lower().endswith('.mp3'):
+                        return tmp
+                    if os.path.abspath(tmp) != os.path.abspath(out_path):
+                        try:
+                            os.replace(tmp, out_path)
+                        except Exception:
+                            out_path = tmp
+                    return out_path if os.path.exists(out_path) else tmp
+        except Exception:
+            pass
     if tts_engine == 'edge' and tts_voice and EDGE_TTS_AVAILABLE and edge_tts is not None:
         audio_file = out_path
         rate_pct = int((float(speed) - 1.0) * 100)
@@ -4296,6 +4315,221 @@ def download_m4b(conversion_id):
         return send_file(out_path, as_attachment=True, download_name=filename, conditional=False)
     except Exception as e:
         return jsonify({'error': f'Erro no download: {str(e)}'}), 500
+
+def _zip_cleanup(now=None):
+    now = now if isinstance(now, (int, float)) else time.time()
+    with ZIP_LOCK:
+        for cid, st in list((ZIP_STATUS or {}).items()):
+            created = st.get('created_at') or 0
+            if created and (now - float(created)) > ZIP_TTL_S:
+                p = st.get('zip_path') or ''
+                if p:
+                    try:
+                        os.remove(p)
+                    except Exception:
+                        pass
+                ZIP_STATUS.pop(cid, None)
+
+def _zip_get(conversion_id):
+    with ZIP_LOCK:
+        st = ZIP_STATUS.get(conversion_id) or {}
+        return dict(st)
+
+def _zip_set(conversion_id, **fields):
+    with ZIP_LOCK:
+        cur = ZIP_STATUS.get(conversion_id) or {}
+        cur.update(fields)
+        ZIP_STATUS[conversion_id] = cur
+        return dict(cur)
+
+def _build_zip_entries(conversion_id, status):
+    pages_info = status.get('pages_info', []) or []
+    entries = []
+    for p in pages_info:
+        filename = secure_filename(p.get('filename') or '')
+        if not filename:
+            continue
+        arc = os.path.basename(filename)
+        label = (p.get('display_label') or '').strip()
+        folder = ''
+        if label:
+            if '—' in label:
+                folder = label.split('—', 1)[0].strip()
+            else:
+                folder = label.strip()
+        folder = secure_filename(folder) if folder else ''
+        if folder:
+            arc = f"{folder}/{arc}"
+        entries.append({'filename': filename, 'arcname': arc})
+    merged_file = status.get('merged_file')
+    if merged_file and os.path.exists(merged_file):
+        entries.append({'full_path': merged_file, 'arcname': os.path.basename(merged_file)})
+    return entries
+
+def _zip_worker(conversion_id, zip_name, status_snapshot):
+    try:
+        _zip_set(conversion_id, status='preparing', progress=0, message='Preparando ZIP...', zip_name=zip_name)
+        entries = _build_zip_entries(conversion_id, status_snapshot or {})
+        if not entries:
+            _zip_set(conversion_id, status='error', progress=0, message='Nenhum arquivo encontrado para compactar.')
+            return
+        out_dir = app.config['CACHE_FOLDER']
+        os.makedirs(out_dir, exist_ok=True)
+        zip_path = os.path.join(out_dir, f"zip_{secure_filename(conversion_id)}_{int(time.time())}.zip")
+        _zip_set(conversion_id, zip_path=zip_path, created_at=time.time(), status='zipping', progress=1, message='Compactando...')
+
+        total = len(entries)
+        added = set()
+        ok_count = 0
+        with zipfile.ZipFile(zip_path, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+            for i, ent in enumerate(entries, start=1):
+                full_path = ent.get('full_path')
+                arcname = ent.get('arcname') or ''
+                if not full_path:
+                    fn = ent.get('filename') or ''
+                    if fn:
+                        full_path = _resolve_audio_path(conversion_id, None, filename=fn)
+                        if not full_path or not os.path.exists(full_path):
+                            page = _db_get_page_by_filename(conversion_id, fn) or {}
+                            text = (page.get('text') or '').strip()
+                            saved = _db_get_conversion(conversion_id) or {}
+                            options = saved.get('options') if isinstance(saved.get('options'), dict) else {}
+                            if text:
+                                out_audio_dir = os.path.join(app.config['AUDIO_FOLDER'], secure_filename(conversion_id))
+                                out_audio_path = os.path.join(out_audio_dir, fn)
+                                res = tts_to_file_with_alignment(
+                                    text,
+                                    out_audio_path,
+                                    lang=str(options.get('lang') or 'pt'),
+                                    speed=float(options.get('speed') or 1.0),
+                                    voice_type=str(options.get('voice_type') or 'default'),
+                                    enhanced_voice=str(options.get('enhanced_voice') or 'default'),
+                                    tts_engine=str(options.get('tts_engine') or 'gtts'),
+                                    tts_voice=(options.get('tts_voice') or None),
+                                    sapi_voice=str(options.get('sapi_voice') or ''),
+                                    use_offline=bool(options.get('use_offline', False)),
+                                    normalize_audio=bool(options.get('normalize_audio', False)),
+                                    trim_silence=bool(options.get('trim_silence', False))
+                                )
+                                full_path = res.get('path') or full_path
+                                if full_path and os.path.exists(full_path):
+                                    try:
+                                        _db_update_page_full_path(conversion_id, fn, full_path)
+                                    except Exception:
+                                        pass
+                if not full_path or not os.path.exists(full_path):
+                    prog = int((i / max(1, total)) * 100)
+                    _zip_set(conversion_id, status='zipping', progress=min(99, max(1, prog)), message=f'Compactando... ({i}/{total})')
+                    continue
+
+                if arcname in added:
+                    base, ext = os.path.splitext(arcname)
+                    k = 2
+                    while f"{base}_{k}{ext}" in added:
+                        k += 1
+                    arcname = f"{base}_{k}{ext}"
+                zf.write(full_path, arcname)
+                added.add(arcname)
+                ok_count += 1
+                prog = int((i / max(1, total)) * 100)
+                _zip_set(conversion_id, status='zipping', progress=min(99, max(1, prog)), message=f'Compactando... ({i}/{total})')
+
+        if ok_count <= 0:
+            try:
+                os.remove(zip_path)
+            except Exception:
+                pass
+            _zip_set(conversion_id, status='error', progress=0, message='Nenhum arquivo pôde ser compactado.')
+            return
+
+        _zip_set(conversion_id, status='completed', progress=100, message=f'ZIP pronto ({ok_count} arquivos).')
+    except Exception as e:
+        st = _zip_get(conversion_id)
+        p = st.get('zip_path') or ''
+        if p:
+            try:
+                os.remove(p)
+            except Exception:
+                pass
+        _zip_set(conversion_id, status='error', progress=0, message=f'Erro ao gerar ZIP: {str(e)}')
+
+@app.route('/api/conversions/<conversion_id>/zip/start', methods=['POST'])
+def start_zip_job(conversion_id):
+    auth_err = _require_login()
+    if auth_err:
+        return auth_err
+
+    _zip_cleanup()
+
+    status = processing_status.get(conversion_id) or _db_get_conversion(conversion_id)
+    if not status:
+        return jsonify({'error': 'Conversão não encontrada'}), 404
+    uid = status.get('user_uid')
+    if uid and g.firebase_user and uid != g.firebase_user.get('uid'):
+        return jsonify({'error': 'Conversão não encontrada'}), 404
+
+    cur = _zip_get(conversion_id)
+    if cur and cur.get('status') in ('preparing', 'zipping'):
+        return jsonify({'success': True, 'status': cur}), 200
+
+    book_title = status.get('book_title') or status.get('source_filename') or f"audiobook_{conversion_id}"
+    book_title = build_book_title(book_title)
+    zip_name = f"{book_title}_audios.zip"
+
+    _zip_set(conversion_id, status='queued', progress=0, message='Na fila para gerar ZIP...', zip_name=zip_name, zip_path='', created_at=time.time())
+    th = threading.Thread(target=_zip_worker, args=(conversion_id, zip_name, status), daemon=True)
+    th.start()
+    return jsonify({'success': True, 'status': _zip_get(conversion_id)}), 200
+
+@app.route('/api/conversions/<conversion_id>/zip/status')
+def zip_job_status(conversion_id):
+    auth_err = _require_login()
+    if auth_err:
+        return auth_err
+    _zip_cleanup()
+    status = processing_status.get(conversion_id) or _db_get_conversion(conversion_id)
+    if not status:
+        return jsonify({'error': 'Conversão não encontrada'}), 404
+    uid = status.get('user_uid')
+    if uid and g.firebase_user and uid != g.firebase_user.get('uid'):
+        return jsonify({'error': 'Conversão não encontrada'}), 404
+    st = _zip_get(conversion_id)
+    if not st:
+        return jsonify({'status': 'idle', 'progress': 0, 'message': ''})
+    out = {
+        'status': st.get('status') or 'idle',
+        'progress': int(st.get('progress') or 0),
+        'message': st.get('message') or '',
+        'zip_name': st.get('zip_name') or ''
+    }
+    if (st.get('status') or '') == 'completed':
+        out['download_url'] = f"/api/conversions/{conversion_id}/zip/download"
+    return jsonify(out)
+
+@app.route('/api/conversions/<conversion_id>/zip/download')
+def zip_job_download(conversion_id):
+    auth_err = _require_login()
+    if auth_err:
+        return auth_err
+    _zip_cleanup()
+    status = processing_status.get(conversion_id) or _db_get_conversion(conversion_id)
+    if not status:
+        return jsonify({'error': 'Conversão não encontrada'}), 404
+    uid = status.get('user_uid')
+    if uid and g.firebase_user and uid != g.firebase_user.get('uid'):
+        return jsonify({'error': 'Conversão não encontrada'}), 404
+    st = _zip_get(conversion_id)
+    if not st or (st.get('status') or '') != 'completed':
+        return jsonify({'error': 'ZIP ainda não está pronto'}), 409
+    zip_path = st.get('zip_path') or ''
+    zip_name = st.get('zip_name') or f"audiobook_{conversion_id}_audios.zip"
+    if not zip_path or not os.path.exists(zip_path):
+        return jsonify({'error': 'ZIP não encontrado no servidor'}), 404
+    resp = send_file(zip_path, as_attachment=True, download_name=zip_name, conditional=False)
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
 
 @app.route('/download-zip/<conversion_id>')
 def download_zip(conversion_id):
