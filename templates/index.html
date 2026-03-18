@@ -29,7 +29,9 @@
             --ro-radius: 20px;
         }
         .gradient-bg {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(90deg, rgba(7, 10, 18, 0.92) 0%, rgba(13, 17, 23, 0.78) 50%, rgba(9, 12, 22, 0.92) 100%);
+            border-bottom: 1px solid rgba(138, 43, 226, 0.18);
+            backdrop-filter: blur(10px);
         }
         body {
             background-image: url('/static/brand/background.svg');
@@ -39,6 +41,28 @@
             background-color: var(--ro-bg);
             color: var(--ro-text);
             font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(900px 480px at 18% 22%, rgba(96, 165, 250, 0.18), rgba(96, 165, 250, 0) 60%),
+                radial-gradient(900px 540px at 62% 35%, rgba(138, 43, 226, 0.22), rgba(138, 43, 226, 0) 65%),
+                radial-gradient(820px 520px at 70% 76%, rgba(246, 211, 101, 0.10), rgba(246, 211, 101, 0) 70%),
+                radial-gradient(1100px 700px at 45% 60%, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 70%);
+            mix-blend-mode: screen;
+            opacity: 0.9;
+        }
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.07) 0 1px, rgba(255, 255, 255, 0) 2px) 0 0/22px 22px;
+            opacity: 0.18;
         }
         main {
             padding-bottom: 220px;
@@ -270,6 +294,120 @@
         }
         .btn-primary.btn-glow {
             box-shadow: 0 0 20px rgba(138, 43, 226, 0.80);
+        }
+        .ds-nav-btn {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            border-radius: var(--ro-radius);
+            color: rgba(229, 231, 235, 0.92);
+        }
+        .ds-nav-btn:hover {
+            background: rgba(255, 255, 255, 0.09);
+        }
+        .ds-panel {
+            position: relative;
+            border-radius: var(--ro-radius) !important;
+            border: 1px solid rgba(138, 43, 226, 0.18) !important;
+            box-shadow: 0 0 15px rgba(138, 43, 226, 0.22), 0 24px 70px rgba(0, 0, 0, 0.45) !important;
+            overflow: hidden;
+        }
+        .ds-panel::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: radial-gradient(420px 260px at 85% 20%, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 70%);
+            opacity: 0.9;
+        }
+        .hero-shell {
+            position: relative;
+            border-radius: 28px;
+            border: 1px solid rgba(138, 43, 226, 0.22);
+            box-shadow: 0 0 24px rgba(138, 43, 226, 0.25), 0 40px 110px rgba(0, 0, 0, 0.55);
+            overflow: hidden;
+        }
+        .hero-shell::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(600px 420px at 18% 20%, rgba(96, 165, 250, 0.16), rgba(96, 165, 250, 0) 60%),
+                radial-gradient(720px 520px at 70% 55%, rgba(138, 43, 226, 0.24), rgba(138, 43, 226, 0) 65%),
+                radial-gradient(520px 320px at 62% 20%, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 70%);
+            opacity: 0.95;
+            pointer-events: none;
+        }
+        .hero-actions {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .hero-listen {
+            border-radius: 22px;
+            border: 1px solid rgba(138, 43, 226, 0.24);
+            background: rgba(255, 255, 255, 0.05);
+            box-shadow: 0 0 18px rgba(138, 43, 226, 0.22);
+        }
+        .hero-wave {
+            height: 18px;
+            width: 170px;
+            display: inline-block;
+        }
+        .hero-wave polyline {
+            fill: none;
+            stroke-width: 2.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            stroke-dasharray: 220;
+            stroke-dashoffset: 0;
+        }
+        .eq-on .hero-wave polyline {
+            animation: waveMove 1.2s linear infinite;
+        }
+        @keyframes waveMove {
+            0% { stroke-dashoffset: 0; opacity: 0.9; }
+            100% { stroke-dashoffset: -220; opacity: 1; }
+        }
+        .hero-convert-wrap {
+            position: relative;
+            display: grid;
+            place-items: center;
+            min-height: 120px;
+        }
+        .hero-ring {
+            position: absolute;
+            width: 220px;
+            height: 220px;
+            border-radius: 999px;
+            background: radial-gradient(circle at 50% 50%, rgba(138, 43, 226, 0.25), rgba(138, 43, 226, 0) 62%);
+            box-shadow: 0 0 40px rgba(138, 43, 226, 0.55);
+        }
+        .hero-ring::after {
+            content: '';
+            position: absolute;
+            inset: 22px;
+            border-radius: 999px;
+            border: 2px solid rgba(138, 43, 226, 0.45);
+            box-shadow: 0 0 28px rgba(138, 43, 226, 0.6);
+        }
+        .hero-convert {
+            position: relative;
+            padding: 14px 38px;
+            border-radius: 999px;
+            border: 1px solid rgba(138, 43, 226, 0.55);
+            background: rgba(138, 43, 226, 0.18);
+            color: rgba(229, 231, 235, 0.95);
+            box-shadow: 0 0 20px rgba(138, 43, 226, 0.80);
+        }
+        .hero-mini-eq {
+            width: 92px;
+            height: 38px;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            background: rgba(255, 255, 255, 0.05);
+            display: grid;
+            place-items: center;
         }
         .chip-glass {
             background: rgba(255, 255, 255, 0.06);
@@ -568,36 +706,33 @@
             </div>
         </div>
     </div>
-    <header class="gradient-bg text-white shadow-lg">
-        <div class="container mx-auto px-4 py-6">
-            <div class="flex items-center justify-between">
+    <header class="gradient-bg text-white">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between gap-4">
                 <div class="flex items-center space-x-3">
-                    <i class="fas fa-book-open text-3xl"></i>
+                    <i class="fas fa-book-open text-2xl"></i>
                     <div>
-                        <h1 class="text-2xl font-bold leading-tight">AudiBook IA</h1>
-                        <div class="text-xs opacity-90">ReadOut • Ggomes-Log</div>
+                        <h1 class="text-lg font-semibold leading-tight">AudiBook IA</h1>
+                        <div class="text-xs opacity-80">Transforme seus livros em audiolivros</div>
                     </div>
                 </div>
-                <div class="flex items-center space-x-3">
-                    <div class="hidden sm:flex items-center space-x-3">
-                        <span id="userLabel" class="text-sm opacity-90"></span>
-                        <button id="logoutBtn" class="hidden bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">
-                            <i class="fas fa-sign-out-alt mr-2"></i>
-                            Sair
-                        </button>
-                    </div>
-                    <p class="text-sm opacity-90 hidden sm:block">AudiBook IA</p>
-                    <button id="openDemoBtn" class="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">
+                <div class="flex items-center gap-2">
+                    <span id="userLabel" class="hidden sm:inline text-xs opacity-80"></span>
+                    <button id="openDemoBtn" class="ds-nav-btn px-4 py-2 text-sm font-semibold transition">
                         <i class="fas fa-bolt mr-2"></i>
                         Teste grátis
                     </button>
-                    <button id="openLibraryBtn" class="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">
+                    <button id="openLibraryBtn" class="ds-nav-btn px-4 py-2 text-sm font-semibold transition">
                         <i class="fas fa-folder-open mr-2"></i>
                         Meus Áudios
                     </button>
-                    <button id="clearCacheBtn" class="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">
+                    <button id="clearCacheBtn" class="ds-nav-btn px-4 py-2 text-sm font-semibold transition">
                         <i class="fas fa-broom mr-2"></i>
                         Limpar Cache
+                    </button>
+                    <button id="logoutBtn" class="hidden ds-nav-btn px-4 py-2 text-sm font-semibold transition">
+                        <i class="fas fa-sign-out-alt mr-2"></i>
+                        Sair
                     </button>
                 </div>
             </div>
@@ -605,42 +740,60 @@
     </header>
 
     <main class="container mx-auto px-4 py-8">
-        <div class="max-w-4xl mx-auto">
+        <div class="max-w-5xl mx-auto">
             <section class="mb-8">
-                <div class="bg-white rounded-xl shadow-lg p-8">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-                        <div>
-                            <h2 class="text-4xl font-extrabold leading-tight">AudiBook IA</h2>
-                            <p class="mt-3 text-lg">Transforme PDFs em áudio imersivo em segundos.</p>
-                            <div class="mt-5 flex flex-wrap gap-2">
-                                <button id="heroDemoBtn" class="chip-glass text-white px-5 py-3 font-semibold transition btn-pill">
-                                    <i class="fas fa-play mr-2"></i>Ouvir amostra
-                                    <span class="eq" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></span>
+                <div class="bg-white shadow-lg p-8 hero-shell">
+                    <div class="relative grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+                        <div class="relative">
+                            <h2 class="text-5xl font-extrabold leading-tight tracking-tight">AudiBook IA</h2>
+                            <p class="mt-3 text-lg" style="color: var(--ro-muted);">Transforme PDFs em áudio imersivo em segundos.</p>
+
+                            <div class="mt-6 hero-actions">
+                                <button id="heroDemoBtn" class="hero-listen px-5 py-3 font-semibold transition">
+                                    <span class="inline-flex items-center gap-3">
+                                        <i class="fas fa-play"></i>
+                                        <span>Listen</span>
+                                        <svg class="hero-wave" viewBox="0 0 200 20" aria-hidden="true">
+                                            <defs>
+                                                <linearGradient id="waveGrad" x1="0" x2="1" y1="0" y2="0">
+                                                    <stop offset="0%" stop-color="#60a5fa" />
+                                                    <stop offset="55%" stop-color="#f6d365" />
+                                                    <stop offset="100%" stop-color="#8a2be2" />
+                                                </linearGradient>
+                                            </defs>
+                                            <polyline stroke="url(#waveGrad)" points="0,10 8,10 14,6 20,14 28,8 34,12 42,4 48,16 56,10 64,6 72,14 80,10 88,3 96,17 104,8 112,12 120,5 128,15 136,8 144,12 152,6 160,14 168,9 176,11 184,7 192,13 200,10"></polyline>
+                                        </svg>
+                                    </span>
                                 </button>
-                                <a href="#upload" class="btn-primary text-white px-5 py-3 font-semibold transition btn-pill btn-glow">
-                                    <i class="fas fa-upload mr-2"></i>Converter agora
+                                <a href="#upload" class="chip-glass px-5 py-3 font-semibold transition btn-pill">
+                                    <i class="fas fa-upload mr-2"></i>Upload
                                 </a>
                             </div>
-                            <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+
+                            <div class="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
                                 <div class="chip-glass p-3"><i class="fas fa-cloud-upload-alt mr-2" style="color: var(--ro-accent)"></i>Upload resumível</div>
                                 <div class="chip-glass p-3"><i class="fas fa-book-open mr-2" style="color: var(--ro-accent)"></i>Capítulos editáveis</div>
                                 <div class="chip-glass p-3"><i class="fas fa-microphone-alt mr-2" style="color: var(--ro-accent)"></i>Vozes reais</div>
                             </div>
                         </div>
-                        <div class="rounded-xl p-6 border" style="background: rgba(255,255,255,0.05); border-color: var(--ro-border);">
-                            <div class="flex items-center justify-between mb-3">
-                                <div class="text-sm font-semibold">Branding</div>
-                                <div class="eq" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+
+                        <div class="relative">
+                            <div class="flex items-center justify-end mb-4">
+                                <div class="hero-mini-eq">
+                                    <span class="eq" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></span>
+                                </div>
                             </div>
-                            <div class="text-sm" style="color: var(--ro-muted);">ReadOut • Ggomes-Log</div>
-                            <div class="mt-4 text-sm">Capítulos, vozes naturais e player contínuo com texto.</div>
-                            <div class="mt-3 text-xs" style="color: var(--ro-muted);">Dica: use “Microsoft Edge” para melhor naturalidade e sincronização do texto.</div>
+                            <div class="hero-convert-wrap">
+                                <div class="hero-ring" aria-hidden="true"></div>
+                                <a href="#upload" class="hero-convert text-lg font-semibold">Convert</a>
+                            </div>
+                            <div class="mt-5 text-sm" style="color: var(--ro-muted);">Upload simultâneo de 5 PDFs em segundo plano</div>
                         </div>
                     </div>
                 </div>
             </section>
             <!-- Upload Section -->
-            <section id="upload" class="bg-white rounded-xl shadow-lg p-8 mb-8">
+            <section id="upload" class="bg-white rounded-xl shadow-lg p-8 mb-8 ds-panel">
                 <h2 class="text-2xl font-semibold mb-6 text-gray-800">
                     <i class="fas fa-upload mr-2 text-purple-600"></i>
                     Enviar Arquivo
@@ -648,7 +801,7 @@
                 
                 <!-- Conversion Options -->
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-                    <div class="bg-white rounded-xl shadow-lg p-5">
+                    <div class="bg-white rounded-xl shadow-lg p-5 ds-panel">
                         <div class="flex items-center justify-between mb-4">
                             <div class="text-lg font-semibold"><i class="fas fa-microphone-alt mr-2" style="color: var(--ro-accent)"></i>Configurações de Voz</div>
                             <div class="eq" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
@@ -693,7 +846,7 @@
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-xl shadow-lg p-5">
+                    <div class="bg-white rounded-xl shadow-lg p-5 ds-panel">
                         <div class="flex items-center justify-between mb-4">
                             <div class="text-lg font-semibold"><i class="fas fa-sliders-h mr-2" style="color: var(--ro-accent)"></i>Qualidade do Som</div>
                             <div class="eq" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
@@ -716,7 +869,7 @@
                 </div>
 
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-                    <div class="bg-white rounded-xl shadow-lg p-5" id="enhancedVoiceSection">
+                    <div class="bg-white rounded-xl shadow-lg p-5 ds-panel" id="enhancedVoiceSection">
                         <div class="text-lg font-semibold mb-3"><i class="fas fa-magic mr-2" style="color: var(--ro-accent)"></i>Voz Ultra-Natural (IA)</div>
                         <select id="enhancedVoiceSelect" name="enhanced_voice" class="w-full px-4 py-3 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700 bg-purple-50">
                             <option value="default">Padrão (GTTS)</option>
@@ -726,7 +879,7 @@
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-xl shadow-lg p-5 hidden" id="edgeVoiceSection">
+                    <div class="bg-white rounded-xl shadow-lg p-5 ds-panel hidden" id="edgeVoiceSection">
                         <div class="text-lg font-semibold mb-3"><i class="fas fa-user-voice mr-2" style="color: var(--ro-accent)"></i>Voz Real (Microsoft Edge)</div>
                         <select id="ttsEngineSelect" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700">
                             <option value="gtts">Padrão (Google gTTS)</option>
@@ -739,7 +892,7 @@
                     </div>
                 </div>
 
-                <div class="bg-white rounded-xl shadow-lg p-5 mb-6 hidden" id="offlineVoiceSection">
+                <div class="bg-white rounded-xl shadow-lg p-5 mb-6 ds-panel hidden" id="offlineVoiceSection">
                     <div class="text-lg font-semibold mb-3"><i class="fas fa-desktop mr-2" style="color: var(--ro-accent)"></i>Modo Offline (Windows SAPI)</div>
                     <div class="flex items-center justify-between border border-gray-200 rounded-lg px-4 py-3" style="background: rgba(255,255,255,0.05);">
                         <div class="text-sm">Usar vozes instaladas no Windows</div>
@@ -783,7 +936,7 @@
             </section>
 
             <!-- Progress Section -->
-            <section id="progressSection" class="hidden bg-white rounded-xl shadow-lg p-8 mb-8">
+            <section id="progressSection" class="hidden bg-white rounded-xl shadow-lg p-8 mb-8 ds-panel">
                 <h2 class="text-2xl font-semibold mb-6 text-gray-800">
                     <i class="fas fa-cog mr-2 text-purple-600 processing"></i>
                     Processando...
@@ -827,7 +980,7 @@
             </section>
 
             <!-- Results Section -->
-            <section id="resultsSection" class="hidden bg-white rounded-xl shadow-lg p-8">
+            <section id="resultsSection" class="hidden bg-white rounded-xl shadow-lg p-8 ds-panel">
                 <h2 class="text-2xl font-semibold mb-6 text-gray-800">
                     <i class="fas fa-check-circle mr-2 text-green-600"></i>
                     Conversão Concluída!
@@ -929,7 +1082,7 @@
             </section>
 
             <!-- Error Section -->
-            <section id="errorSection" class="hidden bg-white rounded-xl shadow-lg p-8">
+            <section id="errorSection" class="hidden bg-white rounded-xl shadow-lg p-8 ds-panel">
                 <div class="text-center">
                     <i class="fas fa-exclamation-triangle text-6xl text-red-500 mb-4"></i>
                     <h2 class="text-2xl font-semibold mb-4 text-gray-800">Ocorreu um Erro</h2>
@@ -943,7 +1096,7 @@
         </div>
     </main>
 
-    <div id="immersiveBar" class="hidden fixed left-4 right-4 bottom-4 z-40">
+    <div id="immersiveBar" class="hidden fixed left-4 right-4 bottom-4 z-40 ds-panel">
         <div class="bg-white rounded-xl shadow-lg p-4" style="border-radius: var(--ro-radius);">
             <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 items-stretch">
                 <div class="lg:col-span-3">
