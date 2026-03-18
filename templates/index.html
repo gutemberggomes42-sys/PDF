@@ -632,12 +632,19 @@
             }
         }
 
-        function getOfflinePageText(conversionId, pageNumber) {
+        function getOfflinePageText(conversionId, pageNumber, filename) {
             try {
                 const raw = localStorage.getItem(`offline_manifest_${conversionId}`) || '';
                 if (!raw) return null;
                 const j = JSON.parse(raw);
                 const pages = j && Array.isArray(j.pages) ? j.pages : [];
+                const fn = filename ? String(filename) : '';
+                if (fn) {
+                    for (const p of pages) {
+                        const pfn = p && p.filename ? String(p.filename) : '';
+                        if (pfn && pfn === fn) return { text: p.text || '' };
+                    }
+                }
                 const pn = parseInt(pageNumber || '0', 10);
                 for (const p of pages) {
                     const ppn = parseInt(p.page_number || '0', 10);
@@ -1707,13 +1714,13 @@
                 }
             }
 
-            async function loadLibraryFollowText(pageNumber, label) {
+            async function loadLibraryFollowText(pageNumber, label, filename) {
                 libSegments = [];
                 libActive = -1;
                 if (libraryFollowStatus) libraryFollowStatus.textContent = 'Carregando texto...';
                 if (libraryFollowBody) libraryFollowBody.textContent = '';
                 try {
-                    const off = getOfflinePageText(conversionId, pageNumber);
+                    const off = getOfflinePageText(conversionId, pageNumber, filename);
                     if (off && (off.text || '').trim()) {
                         const txt = off.text || '';
                         libSegments = splitToSegments(txt);
@@ -1736,7 +1743,7 @@
                     libActive = 0;
                     setActiveSegment(libraryFollowBody, 0);
                 } catch (e) {
-                    if (libraryFollowStatus) libraryFollowStatus.textContent = e.message || 'Texto não disponível';
+                    if (libraryFollowStatus) libraryFollowStatus.textContent = e.message || 'Texto não disponível. Para usar offline, clique em “Salvar offline” com internet.';
                 }
             }
 
@@ -1763,7 +1770,7 @@
                 libraryAudioEl.src = cur.src;
                 updateNow();
                 highlightLibraryCard(libraryCurrentIndex);
-                loadLibraryFollowText(cur.page_number, cur.display_label || '');
+                loadLibraryFollowText(cur.page_number, cur.display_label || '', cur.filename || '');
                 try {
                     const resumeAt = loadPlaybackPos(conversionId, cur.filename || '');
                     libraryAudioEl.load();
@@ -2467,7 +2474,7 @@
             }
         }
 
-        async function loadFollowText(conversionId, pageNumber, label) {
+        async function loadFollowText(conversionId, pageNumber, label, filename) {
             followSegments = [];
             followActiveSeg = -1;
             followMode = 'segments';
@@ -2477,7 +2484,7 @@
             if (followTextStatus) followTextStatus.textContent = 'Carregando texto...';
             if (followTextBody) followTextBody.textContent = '';
             try {
-                const off = getOfflinePageText(conversionId, pageNumber);
+                const off = getOfflinePageText(conversionId, pageNumber, filename);
                 if (off && (off.text || '').trim()) {
                     const txt = off.text || '';
                     followSegments = splitToSegments(txt);
@@ -2510,7 +2517,7 @@
                     followActiveSeg = 0;
                 }
             } catch (e) {
-                if (followTextStatus) followTextStatus.textContent = e.message || 'Texto não disponível';
+                if (followTextStatus) followTextStatus.textContent = e.message || 'Texto não disponível. Para usar offline, clique em “Salvar offline” com internet.';
             }
         }
 
@@ -2665,7 +2672,7 @@
             updatePlaylistDisplay();
             setActiveTrack(currentTrackIndex);
             const label = track.display_label || `Página ${track.page_number}`;
-            loadFollowText(currentConversionId, track.page_number, label);
+            loadFollowText(currentConversionId, track.page_number, label, track.filename);
         }
 
         function updatePlaylistDisplay() {
@@ -3363,19 +3370,6 @@
                 const r = await fetch(url, { cache: 'no-store', headers });
                 if (!r.ok) throw new Error(`Falha ao baixar áudio (HTTP ${r.status})`);
                 await cache.put(new Request(url), r.clone());
-
-                try {
-                    const it = manifest[i] || {};
-                    const pn = it.page_number;
-                    if (pn) {
-                        const tr = await apiFetch(`/api/conversions/${conversionId}/page-text/${pn}?t=${Date.now()}`);
-                        if (tr.ok) {
-                            const tj = await tr.json().catch(() => ({}));
-                            it.text = tj.text || '';
-                        }
-                    }
-                } catch (e) {
-                }
             }
 
             const title = st.book_title || st.filename || 'audiobook';
@@ -3385,6 +3379,32 @@
             list = list.filter(x => x && x.id !== conversionId);
             list.unshift({ id: conversionId, title, count: total, saved_at: Date.now() });
             try { localStorage.setItem(key, JSON.stringify(list.slice(0, 20))); } catch (e) {}
+            try {
+                const maxChars = 12000;
+                const textsResp = await apiFetch(`/api/conversions/${conversionId}/pages-text?max_chars=${maxChars}&t=${Date.now()}`);
+                if (textsResp.ok) {
+                    const tj = await textsResp.json().catch(() => ({}));
+                    const pagesText = Array.isArray(tj.pages) ? tj.pages : [];
+                    const byFn = {};
+                    const byPn = {};
+                    for (const p of pagesText) {
+                        const fn = p && p.filename ? String(p.filename) : '';
+                        const pn = p && p.page_number ? String(p.page_number) : '';
+                        const tx = p && p.text ? String(p.text) : '';
+                        if (fn) byFn[fn] = tx;
+                        if (pn) byPn[pn] = tx;
+                    }
+                    for (const it of manifest) {
+                        const fn = it && it.filename ? String(it.filename) : '';
+                        const pn = it && it.page_number ? String(it.page_number) : '';
+                        let tx = '';
+                        if (fn && byFn[fn]) tx = byFn[fn];
+                        else if (pn && byPn[pn]) tx = byPn[pn];
+                        if (tx) it.text = tx;
+                    }
+                }
+            } catch (e) {
+            }
             try { localStorage.setItem(`offline_manifest_${conversionId}`, JSON.stringify({ title, pages: manifest })); } catch (e) {}
 
             setZipProgress(true, 'Offline pronto! Você pode ouvir sem internet.', 100);

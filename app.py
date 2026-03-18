@@ -3456,6 +3456,86 @@ def get_conversion_page_text(conversion_id, page_number):
         finally:
             conn.close()
 
+@app.route('/api/conversions/<conversion_id>/pages-text')
+def get_conversion_pages_text(conversion_id):
+    auth_err = _require_login()
+    if auth_err:
+        return auth_err
+
+    saved = _db_get_conversion(conversion_id)
+    if not saved:
+        return jsonify({'error': 'Conversão não encontrada'}), 404
+    uid = saved.get('user_uid')
+    if uid and g.firebase_user and uid != g.firebase_user.get('uid'):
+        return jsonify({'error': 'Conversão não encontrada'}), 404
+
+    try:
+        max_chars = int(request.args.get('max_chars') or 12000)
+    except Exception:
+        max_chars = 12000
+    max_chars = max(500, min(50000, max_chars))
+
+    try:
+        max_pages = int(request.args.get('max_pages') or 4000)
+    except Exception:
+        max_pages = 4000
+    max_pages = max(1, min(10000, max_pages))
+
+    pages_out = []
+    if FIRESTORE_CLIENT is not None:
+        try:
+            docs = (
+                FIRESTORE_CLIENT.collection('conversions')
+                .document(conversion_id)
+                .collection('pages')
+                .stream()
+            )
+            for i, d in enumerate(docs):
+                if i >= max_pages:
+                    break
+                pd = d.to_dict() or {}
+                try:
+                    pn = int(pd.get('page_number') or d.id)
+                except Exception:
+                    pn = None
+                txt = pd.get('text') or ''
+                if txt and len(txt) > max_chars:
+                    txt = txt[:max_chars]
+                pages_out.append({
+                    'page_number': pn,
+                    'filename': pd.get('filename'),
+                    'display_label': pd.get('display_label'),
+                    'text': txt
+                })
+        except Exception as e:
+            return jsonify({'error': f'Erro ao carregar textos: {str(e)}'}), 500
+        pages_out.sort(key=lambda x: (x.get('page_number') or 0))
+        return jsonify({'pages': pages_out, 'max_chars': max_chars})
+
+    with DB_LOCK:
+        conn = _db_connect()
+        try:
+            rows = conn.execute(
+                f'SELECT page_number, filename, display_label, text FROM pages WHERE conversion_id={_ph()} ORDER BY page_number ASC',
+                (conversion_id,)
+            ).fetchall()
+            for i, r in enumerate(rows):
+                if i >= max_pages:
+                    break
+                txt = r['text'] or ''
+                if txt and len(txt) > max_chars:
+                    txt = txt[:max_chars]
+                pages_out.append({
+                    'page_number': int(r['page_number']),
+                    'filename': r['filename'],
+                    'display_label': r['display_label'],
+                    'text': txt
+                })
+        finally:
+            conn.close()
+
+    return jsonify({'pages': pages_out, 'max_chars': max_chars})
+
 @app.route('/api/conversions/<conversion_id>/delete', methods=['POST'])
 def delete_conversion(conversion_id):
     auth_err = _require_login()
