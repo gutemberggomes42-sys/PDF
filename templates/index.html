@@ -14,6 +14,16 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
     <style>
+        :root {
+            --ro-bg: #0b1020;
+            --ro-card: rgba(17, 24, 39, 0.62);
+            --ro-border: rgba(255, 255, 255, 0.10);
+            --ro-text: #e5e7eb;
+            --ro-muted: rgba(229, 231, 235, 0.72);
+            --ro-accent: #a855f7;
+            --ro-accent2: #7c3aed;
+            --ro-gold: #f6d365;
+        }
         .gradient-bg {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
@@ -22,24 +32,194 @@
             background-size: cover;
             background-attachment: fixed;
             background-position: center;
+            background-color: var(--ro-bg);
+            color: var(--ro-text);
+        }
+        main .bg-white {
+            background: var(--ro-card) !important;
+            border: 1px solid var(--ro-border) !important;
+            backdrop-filter: blur(16px);
+        }
+        main .shadow-lg {
+            box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55) !important;
+        }
+        main .text-gray-900,
+        main .text-gray-800,
+        main .text-gray-700 {
+            color: var(--ro-text) !important;
+        }
+        main .text-gray-600,
+        main .text-gray-500 {
+            color: var(--ro-muted) !important;
+        }
+        main .border,
+        main .border-gray-200,
+        main .border-gray-300,
+        main .border-purple-200,
+        main .border-purple-300 {
+            border-color: var(--ro-border) !important;
+        }
+        main .bg-gray-50,
+        main .bg-gray-100,
+        main .bg-purple-50 {
+            background: rgba(255, 255, 255, 0.06) !important;
+        }
+        main select,
+        main input[type="text"],
+        main input[type="email"],
+        main textarea {
+            background: rgba(17, 24, 39, 0.55) !important;
+            border-color: var(--ro-border) !important;
+            color: var(--ro-text) !important;
+        }
+        main option {
+            background: #0f172a;
+            color: var(--ro-text);
+        }
+        .btn-glow {
+            box-shadow: 0 0 0 rgba(168, 85, 247, 0);
+            position: relative;
+        }
+        .btn-glow::after {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            border-radius: 16px;
+            background: radial-gradient(60% 120% at 50% 50%, rgba(168, 85, 247, 0.50), rgba(168, 85, 247, 0) 70%);
+            filter: blur(10px);
+            opacity: 0.9;
+            z-index: -1;
+        }
+        .btn-pill {
+            border-radius: 16px !important;
+        }
+        .chip-glass {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--ro-border);
+            border-radius: 16px;
+        }
+        .eq {
+            display: inline-flex;
+            align-items: flex-end;
+            gap: 2px;
+            height: 14px;
+            margin-left: 10px;
+            opacity: 0.9;
+        }
+        .eq span {
+            width: 3px;
+            border-radius: 999px;
+            background: linear-gradient(180deg, #60a5fa, #a855f7);
+            height: 4px;
+            transform-origin: bottom;
+            animation: eqStop 1s infinite;
+            animation-play-state: paused;
+        }
+        .eq-on .eq span {
+            animation-name: eqMove;
+            animation-play-state: running;
+        }
+        .eq span:nth-child(1) { animation-duration: 0.9s; }
+        .eq span:nth-child(2) { animation-duration: 0.75s; }
+        .eq span:nth-child(3) { animation-duration: 1.05s; }
+        .eq span:nth-child(4) { animation-duration: 0.85s; }
+        .eq span:nth-child(5) { animation-duration: 1.15s; }
+        @keyframes eqMove {
+            0%, 100% { height: 3px; opacity: 0.75; }
+            25% { height: 13px; opacity: 1; }
+            55% { height: 6px; opacity: 0.95; }
+            80% { height: 11px; opacity: 1; }
+        }
+        @keyframes eqStop {
+            0%, 100% { height: 4px; }
         }
         .upload-area {
-            border: 3px dashed #cbd5e0;
+            border: 2px dashed rgba(168, 85, 247, 0.55);
+            background: rgba(255, 255, 255, 0.04);
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+            border-radius: 20px;
             transition: all 0.3s ease;
         }
         .upload-area:hover {
-            border-color: #667eea;
-            background-color: #f7fafc;
+            border-color: rgba(168, 85, 247, 0.9);
+            background: rgba(255, 255, 255, 0.06);
         }
         .upload-area.dragover {
-            border-color: #667eea;
-            background-color: #edf2f7;
+            border-color: rgba(168, 85, 247, 1);
+            background: rgba(168, 85, 247, 0.10);
+        }
+        .upload-cloud {
+            width: 86px;
+            height: 86px;
+            margin: 0 auto 14px;
+            border-radius: 999px;
+            display: grid;
+            place-items: center;
+            background: radial-gradient(60% 60% at 50% 40%, rgba(168, 85, 247, 0.35), rgba(168, 85, 247, 0) 70%);
+            box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.30);
+            animation: cloudPulse 2.2s ease-in-out infinite;
+        }
+        @keyframes cloudPulse {
+            0%, 100% { transform: translateY(0); box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.22); }
+            50% { transform: translateY(-2px); box-shadow: 0 0 34px 0 rgba(168, 85, 247, 0.28); }
+        }
+        .upload-area.has-file .upload-cloud {
+            animation: none;
+            box-shadow: 0 0 34px 0 rgba(168, 85, 247, 0.30);
+        }
+        .upload-ring {
+            width: 56px;
+            height: 56px;
+            border-radius: 999px;
+            border: 3px solid rgba(255, 255, 255, 0.14);
+            border-top-color: rgba(168, 85, 247, 0.95);
+            display: none;
+            animation: spin 0.9s linear infinite;
+        }
+        .upload-area.dragover .upload-ring,
+        .upload-area.has-file .upload-ring {
+            display: inline-block;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .toggle {
+            appearance: none;
+            width: 44px;
+            height: 24px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            position: relative;
+            transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+        }
+        .toggle::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.92);
+            transition: transform 160ms ease;
+        }
+        .toggle:checked {
+            background: rgba(168, 85, 247, 0.85);
+            border-color: rgba(168, 85, 247, 0.95);
+            box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.20);
+        }
+        .toggle:checked::after {
+            transform: translateX(20px);
+        }
+        .range {
+            accent-color: var(--ro-accent);
         }
         .progress-bar {
             transition: width 0.3s ease;
         }
         .audio-player {
-            background: linear-gradient(135deg, #f6f8fb 0%, #e9ecef 100%);
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            border-radius: 16px;
         }
         @keyframes pulse {
             0%, 100% { opacity: 1; }
@@ -49,15 +229,15 @@
             animation: pulse 2s infinite;
         }
         .track-active {
-            border: 2px solid #8b5cf6;
-            background-color: #f5f3ff;
+            border: 1px solid rgba(168, 85, 247, 0.85);
+            background: rgba(168, 85, 247, 0.12);
         }
         .seg-active {
-            background-color: #fde68a;
+            background: rgba(246, 211, 101, 0.20);
         }
     </style>
 </head>
-<body class="bg-gray-50">
+<body class="bg-transparent">
     <div id="authModal" class="fixed inset-0 hidden items-center justify-center bg-black bg-opacity-50 z-50">
         <div class="bg-white rounded-xl shadow-lg p-8 w-full max-w-md">
             <h2 class="text-2xl font-semibold text-gray-800 mb-2">Entrar</h2>
@@ -223,30 +403,31 @@
                 <div class="bg-white rounded-xl shadow-lg p-8">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
                         <div>
-                            <h2 class="text-3xl font-extrabold text-gray-900 leading-tight">Transforme qualquer PDF em audiolivro em minutos</h2>
-                            <p class="text-gray-600 mt-3">Upload resumível, capítulos, vozes naturais e retomada automática. Feito para estudar, trabalhar e ouvir em qualquer lugar.</p>
+                            <h2 class="text-4xl font-extrabold leading-tight">AudiBook IA</h2>
+                            <p class="mt-3 text-lg">Transforme PDFs em áudio imersivo em segundos.</p>
                             <div class="mt-5 flex flex-wrap gap-2">
-                                <button id="heroDemoBtn" class="bg-purple-600 text-white px-5 py-3 rounded-lg font-semibold hover:bg-purple-700 transition">
+                                <button id="heroDemoBtn" class="bg-purple-600 text-white px-5 py-3 font-semibold hover:bg-purple-700 transition btn-pill">
                                     <i class="fas fa-play mr-2"></i>Ouvir amostra
+                                    <span class="eq" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></span>
                                 </button>
-                                <a href="#upload" class="bg-gray-100 text-gray-800 px-5 py-3 rounded-lg font-semibold hover:bg-gray-200 transition">
+                                <a href="#upload" class="bg-purple-600 text-white px-5 py-3 font-semibold hover:bg-purple-700 transition btn-pill btn-glow">
                                     <i class="fas fa-upload mr-2"></i>Converter agora
                                 </a>
                             </div>
                             <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-                                <div class="bg-purple-50 text-purple-900 rounded-lg p-3"><i class="fas fa-cloud-upload-alt mr-2"></i>Upload resumível</div>
-                                <div class="bg-purple-50 text-purple-900 rounded-lg p-3"><i class="fas fa-heading mr-2"></i>Capítulos editáveis</div>
-                                <div class="bg-purple-50 text-purple-900 rounded-lg p-3"><i class="fas fa-microphone-alt mr-2"></i>Vozes reais</div>
+                                <div class="chip-glass p-3"><i class="fas fa-cloud-upload-alt mr-2" style="color: var(--ro-accent)"></i>Upload resumível</div>
+                                <div class="chip-glass p-3"><i class="fas fa-book-open mr-2" style="color: var(--ro-accent)"></i>Capítulos editáveis</div>
+                                <div class="chip-glass p-3"><i class="fas fa-microphone-alt mr-2" style="color: var(--ro-accent)"></i>Vozes reais</div>
                             </div>
                         </div>
-                        <div class="bg-gradient-to-br from-purple-50 to-white rounded-xl p-6 border">
-                            <div class="text-sm font-semibold text-gray-800 mb-2">Como funciona</div>
-                            <ol class="space-y-2 text-sm text-gray-700">
-                                <li class="flex items-start"><span class="w-6 h-6 rounded-full bg-purple-600 text-white flex items-center justify-center mr-2">1</span>Envie PDF, DOCX ou TXT</li>
-                                <li class="flex items-start"><span class="w-6 h-6 rounded-full bg-purple-600 text-white flex items-center justify-center mr-2">2</span>Escolha a voz e a divisão</li>
-                                <li class="flex items-start"><span class="w-6 h-6 rounded-full bg-purple-600 text-white flex items-center justify-center mr-2">3</span>Baixe por capítulo ou tudo em ZIP</li>
-                            </ol>
-                            <div class="mt-4 text-xs text-gray-500">Dica: use “Microsoft Edge” para melhor naturalidade e sincronização do texto.</div>
+                        <div class="rounded-xl p-6 border" style="background: rgba(255,255,255,0.05); border-color: var(--ro-border);">
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="text-sm font-semibold">Branding</div>
+                                <div class="eq" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+                            </div>
+                            <div class="text-sm" style="color: var(--ro-muted);">ReadOut • Ggomes-Log</div>
+                            <div class="mt-4 text-sm">Capítulos, vozes naturais e player contínuo com texto.</div>
+                            <div class="mt-3 text-xs" style="color: var(--ro-muted);">Dica: use “Microsoft Edge” para melhor naturalidade e sincronização do texto.</div>
                         </div>
                     </div>
                 </div>
@@ -259,75 +440,77 @@
                 </h2>
                 
                 <!-- Conversion Options -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Idioma</label>
-                        <select id="languageSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
-                            <option value="pt">Português</option>
-                            <option value="en">English</option>
-                            <option value="es">Español</option>
-                            <option value="fr">Français</option>
-                            <option value="de">Deutsch</option>
-                            <option value="it">Italiano</option>
-                            <option value="ru">Русский</option>
-                            <option value="ja">日本語</option>
-                            <option value="zh">中文</option>
-                        </select>
-                    </div>
-                    
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Velocidade</label>
-                        <div class="flex items-center space-x-2">
-                            <input type="range" id="speedSlider" min="0.5" max="2.0" step="0.1" value="1.0" class="flex-1">
-                            <span id="speedValue" class="text-sm font-medium text-gray-700 w-12">1.0x</span>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+                    <div class="bg-white rounded-xl shadow-lg p-5">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="text-lg font-semibold"><i class="fas fa-microphone-alt mr-2" style="color: var(--ro-accent)"></i>Configurações de Voz</div>
+                            <div class="eq" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-2">Idioma</label>
+                                <select id="languageSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                                    <option value="pt">Português</option>
+                                    <option value="en">English</option>
+                                    <option value="es">Español</option>
+                                    <option value="fr">Français</option>
+                                    <option value="de">Deutsch</option>
+                                    <option value="it">Italiano</option>
+                                    <option value="ru">Русский</option>
+                                    <option value="ja">日本語</option>
+                                    <option value="zh">中文</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-2">Velocidade</label>
+                                <div class="flex items-center space-x-2">
+                                    <input type="range" id="speedSlider" min="0.5" max="2.0" step="0.1" value="1.0" class="flex-1 range">
+                                    <span id="speedValue" class="text-sm font-medium w-12">1.0x</span>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-2"><i class="fas fa-list-ol mr-2"></i>Separar por</label>
+                                <select id="splitModeSelect" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700">
+                                    <option value="chapter" selected>Capítulo (recomendado)</option>
+                                    <option value="page">Página</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-2"><i class="fas fa-user-voice mr-2"></i>Tipo de voz</label>
+                                <select id="voiceSelect" name="voice_type" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700">
+                                    <option value="default">Padrão</option>
+                                    <option value="female">Feminina</option>
+                                    <option value="male">Masculina</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
 
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">
-                            <i class="fas fa-list-ol mr-2"></i>Separar Por
-                        </label>
-                        <select id="splitModeSelect" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700">
-                            <option value="chapter" selected>Capítulo (recomendado)</option>
-                            <option value="page">Página</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">
-                            <i class="fas fa-sliders-h mr-2"></i>Qualidade do Áudio
-                        </label>
-                        <div class="space-y-2">
-                            <label class="flex items-center space-x-2 text-sm text-gray-700">
-                                <input id="normalizeToggle" type="checkbox" class="h-4 w-4">
-                                <span>Normalizar volume</span>
-                            </label>
-                            <label class="flex items-center space-x-2 text-sm text-gray-700">
-                                <input id="trimSilenceToggle" type="checkbox" class="h-4 w-4">
-                                <span>Remover silêncio no começo/fim</span>
-                            </label>
-                            <label class="flex items-center space-x-2 text-sm text-gray-700">
-                                <input id="useOcrToggle" type="checkbox" class="h-4 w-4">
-                                <span>Ativar OCR (PDF escaneado)</span>
-                            </label>
+                    <div class="bg-white rounded-xl shadow-lg p-5">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="text-lg font-semibold"><i class="fas fa-sliders-h mr-2" style="color: var(--ro-accent)"></i>Qualidade do Som</div>
+                            <div class="eq" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+                        </div>
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between">
+                                <div class="text-sm">Normalizar volume</div>
+                                <input id="normalizeToggle" type="checkbox" class="toggle">
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div class="text-sm">Remover silêncio no começo/fim</div>
+                                <input id="trimSilenceToggle" type="checkbox" class="toggle">
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div class="text-sm">Ativar OCR (PDF escaneado)</div>
+                                <input id="useOcrToggle" type="checkbox" class="toggle">
+                            </div>
                         </div>
                     </div>
-                    
-                    <div class="mb-6">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">
-                            <i class="fas fa-microphone-alt mr-2"></i>Tipo de Voz
-                        </label>
-                        <select id="voiceSelect" name="voice_type" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700">
-                            <option value="default">Padrão</option>
-                            <option value="female">Feminina</option>
-                            <option value="male">Masculina</option>
-                        </select>
-                    </div>
+                </div>
 
-                    <div class="mb-6" id="enhancedVoiceSection">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">
-                            <i class="fas fa-magic mr-2"></i>Voz Ultra-Natural (IA)
-                        </label>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+                    <div class="bg-white rounded-xl shadow-lg p-5" id="enhancedVoiceSection">
+                        <div class="text-lg font-semibold mb-3"><i class="fas fa-magic mr-2" style="color: var(--ro-accent)"></i>Voz Ultra-Natural (IA)</div>
                         <select id="enhancedVoiceSelect" name="enhanced_voice" class="w-full px-4 py-3 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700 bg-purple-50">
                             <option value="default">Padrão (GTTS)</option>
                         </select>
@@ -336,10 +519,8 @@
                         </div>
                     </div>
 
-                    <div class="mb-6 hidden" id="edgeVoiceSection">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">
-                            <i class="fas fa-user-voice mr-2"></i>Voz Real (Microsoft Edge)
-                        </label>
+                    <div class="bg-white rounded-xl shadow-lg p-5 hidden" id="edgeVoiceSection">
+                        <div class="text-lg font-semibold mb-3"><i class="fas fa-user-voice mr-2" style="color: var(--ro-accent)"></i>Voz Real (Microsoft Edge)</div>
                         <select id="ttsEngineSelect" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700">
                             <option value="gtts">Padrão (Google gTTS)</option>
                             <option value="edge">Microsoft Edge TTS (real)</option>
@@ -349,30 +530,27 @@
                         </select>
                         <div id="edgeVoiceStatus" class="mt-2 text-sm text-gray-600"></div>
                     </div>
+                </div>
 
-                    <div class="mb-6 hidden" id="offlineVoiceSection">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">
-                            <i class="fas fa-desktop mr-2"></i>Modo Offline (Windows SAPI)
-                        </label>
-                        <div class="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
-                            <div class="text-sm text-gray-700">
-                                Usar vozes instaladas no Windows
-                            </div>
-                            <label class="inline-flex items-center cursor-pointer">
-                                <input id="offlineToggle" type="checkbox" class="h-5 w-5 text-purple-600">
-                            </label>
-                        </div>
-                        <select id="sapiVoiceSelect" class="mt-3 w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700 hidden">
-                            <option value="">Selecionar voz do Windows (opcional)</option>
-                        </select>
-                        <div id="offlineVoiceStatus" class="mt-2 text-sm text-gray-600"></div>
+                <div class="bg-white rounded-xl shadow-lg p-5 mb-6 hidden" id="offlineVoiceSection">
+                    <div class="text-lg font-semibold mb-3"><i class="fas fa-desktop mr-2" style="color: var(--ro-accent)"></i>Modo Offline (Windows SAPI)</div>
+                    <div class="flex items-center justify-between border border-gray-200 rounded-lg px-4 py-3" style="background: rgba(255,255,255,0.05);">
+                        <div class="text-sm">Usar vozes instaladas no Windows</div>
+                        <input id="offlineToggle" type="checkbox" class="toggle">
                     </div>
+                    <select id="sapiVoiceSelect" class="mt-3 w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700 hidden">
+                        <option value="">Selecionar voz do Windows (opcional)</option>
+                    </select>
+                    <div id="offlineVoiceStatus" class="mt-2 text-sm text-gray-600"></div>
                 </div>
                 
-                <div id="uploadArea" class="upload-area rounded-lg p-12 text-center cursor-pointer">
-                    <i class="fas fa-cloud-upload-alt text-6xl text-gray-400 mb-4"></i>
-                    <p class="text-lg text-gray-600 mb-2">Arraste seu arquivo aqui ou clique para selecionar</p>
-                    <p class="text-sm text-gray-500">Formatos: PDF, DOCX, TXT (Tamanho máximo: 50MB)</p>
+                <div id="uploadArea" class="upload-area p-12 text-center cursor-pointer">
+                    <div class="upload-cloud">
+                        <div class="upload-ring" aria-hidden="true"></div>
+                        <i class="fas fa-cloud-upload-alt text-3xl" style="color: rgba(246, 211, 101, 0.95)"></i>
+                    </div>
+                    <p id="uploadHint" class="text-lg mb-2">Arraste seu arquivo aqui ou toque para selecionar</p>
+                    <p id="uploadFilename" class="text-sm" style="color: var(--ro-muted);">Formatos: PDF, DOCX, TXT (Tamanho máximo: 50MB)</p>
                     <input type="file" id="fileInput" accept=".pdf,.docx,.txt" class="hidden">
                 </div>
 
@@ -913,6 +1091,8 @@
         const librarySearch = document.getElementById('librarySearch');
         const libraryStatusFilter = document.getElementById('libraryStatusFilter');
         const uploadArea = document.getElementById('uploadArea');
+        const uploadHint = document.getElementById('uploadHint');
+        const uploadFilename = document.getElementById('uploadFilename');
         const fileInput = document.getElementById('fileInput');
         const fileInfo = document.getElementById('fileInfo');
         const fileName = document.getElementById('fileName');
@@ -1264,6 +1444,13 @@
             if (!demoModal) return;
             demoModal.classList.remove('hidden');
             demoModal.classList.add('flex');
+            try {
+                if (heroDemoBtn) {
+                    heroDemoBtn.classList.add('eq-on');
+                    setTimeout(() => { try { heroDemoBtn.classList.remove('eq-on'); } catch (e) {} }, 1600);
+                }
+            } catch (e) {
+            }
             if (demoError) {
                 demoError.classList.add('hidden');
                 demoError.textContent = '';
@@ -2232,10 +2419,18 @@
         uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
             uploadArea.classList.add('dragover');
+            try {
+                if (uploadHint) uploadHint.textContent = 'Solte para enviar';
+            } catch (e2) {
+            }
         });
 
         uploadArea.addEventListener('dragleave', () => {
             uploadArea.classList.remove('dragover');
+            try {
+                if (uploadHint && !uploadArea.classList.contains('has-file')) uploadHint.textContent = 'Arraste seu arquivo aqui ou toque para selecionar';
+            } catch (e) {
+            }
         });
 
         uploadArea.addEventListener('drop', (e) => {
@@ -2282,6 +2477,13 @@
             fileInfo.classList.remove('hidden');
             convertBtn.classList.remove('hidden');
             convertBtn.dataset.file = file;
+            try {
+                uploadArea.classList.add('has-file');
+                uploadArea.classList.remove('dragover');
+                if (uploadHint) uploadHint.textContent = 'Arquivo selecionado';
+                if (uploadFilename) uploadFilename.textContent = `${file.name} • ${formatFileSize(file.size)}`;
+            } catch (e) {
+            }
         }
 
         function formatFileSize(bytes) {
@@ -2296,6 +2498,13 @@
             fileInput.value = '';
             fileInfo.classList.add('hidden');
             convertBtn.classList.add('hidden');
+            try {
+                uploadArea.classList.remove('has-file');
+                uploadArea.classList.remove('dragover');
+                if (uploadHint) uploadHint.textContent = 'Arraste seu arquivo aqui ou toque para selecionar';
+                if (uploadFilename) uploadFilename.textContent = 'Formatos: PDF, DOCX, TXT (Tamanho máximo: 50MB)';
+            } catch (e) {
+            }
             resetUI();
         });
 
@@ -3502,6 +3711,13 @@
             progressSection.classList.add('hidden');
             resultsSection.classList.add('hidden');
             errorSection.classList.add('hidden');
+            try {
+                uploadArea.classList.remove('has-file');
+                uploadArea.classList.remove('dragover');
+                if (uploadHint) uploadHint.textContent = 'Arraste seu arquivo aqui ou toque para selecionar';
+                if (uploadFilename) uploadFilename.textContent = 'Formatos: PDF, DOCX, TXT (Tamanho máximo: 50MB)';
+            } catch (e) {
+            }
             
             // Hide merge buttons
             mergeAudioBtn.classList.add('hidden');
