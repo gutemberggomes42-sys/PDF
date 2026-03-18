@@ -685,7 +685,7 @@ def service_worker():
     return send_file('static/sw.js')
 
 if __name__ == '__main__':
-    print("🚀 PDF para Áudio Avançado v3.0 - Enterprise Edition")
+    print("🚀 ReadOut — Ggomes-Log")
     print("📱 PWA Mode: ON")
     print("🔐 Security: ON")
     print("💾 Cache: ON")

@@ -46,7 +46,7 @@ class MainActivity : AppCompatActivity() {
         settings.allowFileAccess = true
         settings.allowContentAccess = true
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-        settings.userAgentString = settings.userAgentString + " PdfToAudioAndroid/1.0"
+        settings.userAgentString = settings.userAgentString + " ReadOutAndroid/1.0"
 
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {

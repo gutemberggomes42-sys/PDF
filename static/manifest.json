@@ -1,7 +1,7 @@
 {
-  "name": "PDF para Áudio Avançado",
-  "short_name": "PDF Audio",
-  "description": "Transforme PDFs, DOCX e TXT em audiolivros com IA",
+  "name": "ReadOut",
+  "short_name": "ReadOut",
+  "description": "ReadOut — Ggomes-Log: transforme PDFs, DOCX e TXT em audiolivros",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#667eea",

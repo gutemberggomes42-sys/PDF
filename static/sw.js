@@ -1,6 +1,6 @@
-const CACHE_NAME = 'pdf-audio-v3.0.0';
-const STATIC_CACHE = 'static-v3.0.0';
-const DYNAMIC_CACHE = 'dynamic-v3.0.0';
+const CACHE_NAME = 'readout-v3.0.0';
+const STATIC_CACHE = 'readout-static-v3.0.0';
+const DYNAMIC_CACHE = 'readout-dynamic-v3.0.0';
 const OFFLINE_AUDIO_CACHE = 'offline-audio-v1';
 
 // Arquivos estáticos para cache
@@ -156,7 +156,7 @@ self.addEventListener('push', (event) => {
   };
   
   event.waitUntil(
-    self.registration.showNotification('PDF para Áudio', options)
+    self.registration.showNotification('ReadOut', options)
   );
 });
 

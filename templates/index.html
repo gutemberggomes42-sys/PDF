@@ -6,7 +6,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>PDF para Áudio Avançado v3.0 - Enterprise Edition</title>
+    <title>ReadOut — Ggomes-Log</title>
     <link rel="manifest" href="/static/manifest.json">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -179,7 +179,10 @@
             <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-3">
                     <i class="fas fa-book-open text-3xl"></i>
-                    <h1 class="text-2xl font-bold">PDF para Áudio</h1>
+                    <div>
+                        <h1 class="text-2xl font-bold leading-tight">ReadOut</h1>
+                        <div class="text-xs opacity-90">Ggomes-Log</div>
+                    </div>
                 </div>
                 <div class="flex items-center space-x-3">
                     <div class="hidden sm:flex items-center space-x-3">
@@ -189,7 +192,7 @@
                             Sair
                         </button>
                     </div>
-                    <p class="text-sm opacity-90 hidden sm:block">Transforme seus livros em audiolivros</p>
+                    <p class="text-sm opacity-90 hidden sm:block">ReadOut • Ggomes-Log</p>
                     <button id="openDemoBtn" class="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">
                         <i class="fas fa-bolt mr-2"></i>
                         Teste grátis
@@ -542,7 +545,7 @@
 
     <footer class="bg-gray-800 text-white py-6 mt-12">
         <div class="container mx-auto px-4 text-center">
-            <p class="text-sm opacity-75">© 2024 PDF para Áudio. Transforme seus livros em experiências auditivas.</p>
+            <p class="text-sm opacity-75">ReadOut — Ggomes-Log</p>
         </div>
     </footer>
 
@@ -3286,7 +3289,8 @@
             if (!downloadUrl) {
                 throw new Error('Tempo excedido ao gerar ZIP');
             }
-            const isAndroidApp = (navigator.userAgent || '').includes('PdfToAudioAndroid');
+            const ua = (navigator.userAgent || '');
+            const isAndroidApp = ua.includes('ReadOutAndroid') || ua.includes('PdfToAudioAndroid');
             if (isAndroidApp) {
                 setZipProgress(true, 'Iniciando download... (veja a notificação do Android)', 100);
                 try {
