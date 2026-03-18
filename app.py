@@ -546,6 +546,7 @@ def _db_init():
                         conversion_id TEXT PRIMARY KEY,
                         source_filename TEXT,
                         source_type TEXT,
+                        source_size_bytes INTEGER,
                         book_title TEXT,
                         user_uid TEXT,
                         user_email TEXT,
@@ -567,6 +568,8 @@ def _db_init():
                         merge_status TEXT,
                         merge_progress INTEGER,
                         merge_message TEXT,
+                        was_heard INTEGER DEFAULT 0,
+                        heard_at TEXT,
                         client_ip TEXT,
                         user_agent TEXT
                     )
@@ -639,6 +642,8 @@ def _db_init():
                     conn.execute("ALTER TABLE conversions ADD COLUMN chapters_json TEXT")
                 if 'source_storage' not in cols:
                     conn.execute("ALTER TABLE conversions ADD COLUMN source_storage TEXT")
+                if 'source_size_bytes' not in cols:
+                    conn.execute("ALTER TABLE conversions ADD COLUMN source_size_bytes INTEGER")
                 if 'source_local_path' not in cols:
                     conn.execute("ALTER TABLE conversions ADD COLUMN source_local_path TEXT")
                 if 'control_status' not in cols:
@@ -651,6 +656,10 @@ def _db_init():
                     conn.execute("ALTER TABLE conversions ADD COLUMN share_enabled INTEGER")
                 if 'share_expires_at' not in cols:
                     conn.execute("ALTER TABLE conversions ADD COLUMN share_expires_at TEXT")
+                if 'was_heard' not in cols:
+                    conn.execute("ALTER TABLE conversions ADD COLUMN was_heard INTEGER")
+                if 'heard_at' not in cols:
+                    conn.execute("ALTER TABLE conversions ADD COLUMN heard_at TEXT")
                 try:
                     conn.execute("CREATE INDEX IF NOT EXISTS idx_conversions_share_token ON conversions(share_token)")
                 except Exception:
@@ -2075,14 +2084,22 @@ def demo_tts():
 
     return send_file(out_path, as_attachment=False, mimetype='audio/mpeg', conditional=False)
 
-def _start_conversion_processing(conversion_id, pdf_path, filename, book_title, options, src_remote=None):
+def _start_conversion_processing(conversion_id, pdf_path, filename, book_title, options, src_remote=None, source_size_bytes=None):
     created_at = datetime.now().isoformat()
+    was_heard_val = None
     try:
         existing = _db_get_conversion(conversion_id)
         if existing and existing.get('created_at'):
             created_at = existing.get('created_at')
+        if existing and ('was_heard' in existing) and existing.get('was_heard') is not None:
+            try:
+                was_heard_val = bool(int(existing.get('was_heard') or 0))
+            except Exception:
+                was_heard_val = bool(existing.get('was_heard'))
     except Exception:
         pass
+    if was_heard_val is None:
+        was_heard_val = False
 
     processing_status[conversion_id] = {
         'status': 'queued',
@@ -2102,6 +2119,7 @@ def _start_conversion_processing(conversion_id, pdf_path, filename, book_title, 
         conversion_id,
         source_filename=filename,
         source_type=options.get('file_type'),
+        source_size_bytes=int(source_size_bytes) if source_size_bytes is not None else None,
         book_title=book_title,
         user_uid=g.firebase_user.get('uid') if g.firebase_user else None,
         user_email=g.firebase_user.get('email') if g.firebase_user else None,
@@ -2114,6 +2132,7 @@ def _start_conversion_processing(conversion_id, pdf_path, filename, book_title, 
         source_storage=src_remote,
         source_local_path=pdf_path,
         control_status='',
+        was_heard=was_heard_val,
         client_ip=request.remote_addr,
         user_agent=request.headers.get('User-Agent')
     )
@@ -2172,13 +2191,17 @@ def upload_file():
         book_title = build_book_title(filename)
         pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{conversion_id}_{filename}")
         file.save(pdf_path)
+        try:
+            source_size_bytes = os.path.getsize(pdf_path)
+        except Exception:
+            source_size_bytes = None
 
         src_remote = _storage_upload(
             pdf_path,
             f"uploads/{conversion_id}/{filename}",
             content_type=mimetypes.guess_type(filename)[0] or 'application/octet-stream'
         )
-        _start_conversion_processing(conversion_id, pdf_path, filename, book_title, options, src_remote=src_remote)
+        _start_conversion_processing(conversion_id, pdf_path, filename, book_title, options, src_remote=src_remote, source_size_bytes=source_size_bytes)
         
         return jsonify({
             'conversion_id': conversion_id,
@@ -2381,7 +2404,13 @@ def upload_complete(conversion_id):
         f"uploads/{conversion_id}/{filename}",
         content_type=mimetypes.guess_type(filename)[0] or 'application/octet-stream'
     )
-    _start_conversion_processing(conversion_id, pdf_path, filename, book_title, options, src_remote=src_remote)
+    source_size_bytes = total or None
+    if source_size_bytes is None:
+        try:
+            source_size_bytes = os.path.getsize(pdf_path)
+        except Exception:
+            source_size_bytes = None
+    _start_conversion_processing(conversion_id, pdf_path, filename, book_title, options, src_remote=src_remote, source_size_bytes=source_size_bytes)
     return jsonify({'ok': True, 'conversion_id': conversion_id})
 
 def process_pdf(conversion_id, pdf_path, options=None):
@@ -2849,6 +2878,9 @@ def list_conversions():
         return auth_err
     limit = request.args.get('limit', '50')
     offset = request.args.get('offset', '0')
+    status_filter = (request.args.get('status') or '').strip().lower()
+    heard_filter = (request.args.get('heard') or '').strip().lower()
+    order = (request.args.get('order') or 'desc').strip().lower()
     try:
         limit_i = max(1, min(200, int(limit)))
     except Exception:
@@ -2857,12 +2889,28 @@ def list_conversions():
         offset_i = max(0, int(offset))
     except Exception:
         offset_i = 0
+    if order not in ('asc', 'desc'):
+        order = 'desc'
+    status_values = None
+    if status_filter and status_filter not in ('all',):
+        if status_filter == 'processing':
+            status_values = ['processing', 'queued', 'uploading']
+        else:
+            status_values = [status_filter]
 
     if FIRESTORE_CLIENT is not None:
-        q = FIRESTORE_CLIENT.collection('conversions').order_by('created_at', direction=firebase_firestore.Query.DESCENDING)
+        direction = firebase_firestore.Query.ASCENDING if order == 'asc' else firebase_firestore.Query.DESCENDING
+        q = FIRESTORE_CLIENT.collection('conversions').order_by('created_at', direction=direction)
         uid = g.firebase_user.get('uid') if g.firebase_user else None
         if uid:
             q = q.where('user_uid', '==', uid)
+        if status_values:
+            if len(status_values) == 1:
+                q = q.where('status', '==', status_values[0])
+            else:
+                q = q.where('status', 'in', status_values)
+        if heard_filter in ('heard', 'unheard'):
+            q = q.where('was_heard', '==', (heard_filter == 'heard'))
         if offset_i:
             q = q.offset(offset_i)
         docs = q.limit(limit_i).stream()
@@ -2870,10 +2918,18 @@ def list_conversions():
         for doc in docs:
             d = doc.to_dict() or {}
             d['conversion_id'] = d.get('conversion_id') or doc.id
+            try:
+                size_b = int(d.get('source_size_bytes') or 0)
+            except Exception:
+                size_b = 0
+            size_mb = round(size_b / 1048576.0, 2) if size_b > 0 else None
             items.append({
                 'conversion_id': d.get('conversion_id'),
                 'source_filename': d.get('source_filename'),
                 'source_type': d.get('source_type'),
+                'file_size_mb': size_mb,
+                'tipo_arquivo': d.get('source_type'),
+                'tamanho_arquivo_mb': size_mb,
                 'book_title': d.get('book_title'),
                 'created_at': d.get('created_at'),
                 'updated_at': d.get('updated_at'),
@@ -2885,7 +2941,10 @@ def list_conversions():
                 'merged_file': d.get('merged_file'),
                 'merge_status': d.get('merge_status'),
                 'merge_progress': d.get('merge_progress'),
-                'merge_message': d.get('merge_message')
+                'merge_message': d.get('merge_message'),
+                'was_heard': bool(d.get('was_heard') or False),
+                'foi_ouvido': bool(d.get('was_heard') or False),
+                'heard_at': d.get('heard_at')
             })
         return jsonify({'items': items, 'limit': limit_i, 'offset': offset_i})
 
@@ -2893,24 +2952,48 @@ def list_conversions():
     with DB_LOCK:
         conn = _db_connect()
         try:
-            where_sql = ''
+            where_parts = []
             params = []
             if uid:
-                where_sql = f'WHERE user_uid={_ph()}'
+                where_parts.append(f'user_uid={_ph()}')
                 params.append(uid)
+            if status_values:
+                if len(status_values) == 1:
+                    where_parts.append(f'status={_ph()}')
+                    params.append(status_values[0])
+                else:
+                    where_parts.append(f"status IN ({_ph_list(len(status_values))})")
+                    params.extend(status_values)
+            if heard_filter in ('heard', 'unheard'):
+                where_parts.append(f'was_heard={_ph()}')
+                params.append(1 if heard_filter == 'heard' else 0)
+            where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ''
             rows = conn.execute(
                 '''
-                SELECT conversion_id, source_filename, source_type, book_title, created_at, updated_at,
+                SELECT conversion_id, source_filename, source_type, source_size_bytes, book_title, created_at, updated_at,
                        status, progress, message, from_cache, from_edited_text,
-                       merged_file, merge_status, merge_progress, merge_message
+                       merged_file, merge_status, merge_progress, merge_message,
+                       was_heard, heard_at
                 FROM conversions
                 ''' + where_sql + '''
-                ORDER BY created_at DESC
+                ORDER BY created_at ''' + ('ASC' if order == 'asc' else 'DESC') + '''
                 LIMIT ''' + _ph() + ' OFFSET ' + _ph() + '''
                 ''',
                 (*params, limit_i, offset_i)
             ).fetchall()
-            result = [dict(r) for r in rows]
+            result = []
+            for r in rows:
+                d = dict(r)
+                try:
+                    size_b = int(d.get('source_size_bytes') or 0)
+                except Exception:
+                    size_b = 0
+                d['file_size_mb'] = round(size_b / 1048576.0, 2) if size_b > 0 else None
+                d['was_heard'] = bool(int(d.get('was_heard') or 0))
+                d['tipo_arquivo'] = d.get('source_type')
+                d['tamanho_arquivo_mb'] = d.get('file_size_mb')
+                d['foi_ouvido'] = d.get('was_heard')
+                result.append(d)
         finally:
             conn.close()
     return jsonify({'items': result, 'limit': limit_i, 'offset': offset_i})
@@ -2927,6 +3010,22 @@ def get_conversion_saved(conversion_id):
     if uid and g.firebase_user and uid != g.firebase_user.get('uid'):
         return jsonify({'error': 'Conversão não encontrada'}), 404
     return jsonify(saved)
+
+@app.route('/api/conversions/<conversion_id>/heard', methods=['POST'])
+def mark_conversion_heard(conversion_id):
+    auth_err = _require_login()
+    if auth_err:
+        return auth_err
+    saved = _db_get_conversion(conversion_id)
+    if not saved:
+        return jsonify({'error': 'Conversão não encontrada'}), 404
+    uid = saved.get('user_uid')
+    if uid and g.firebase_user and uid != g.firebase_user.get('uid'):
+        return jsonify({'error': 'Conversão não encontrada'}), 404
+
+    now = datetime.now().isoformat()
+    _db_upsert_conversion(conversion_id, was_heard=True, heard_at=now)
+    return jsonify({'ok': True, 'conversion_id': conversion_id, 'was_heard': True, 'heard_at': now})
 
 def _share_is_active(conv):
     if not conv:
@@ -3535,6 +3634,127 @@ def get_conversion_pages_text(conversion_id):
             conn.close()
 
     return jsonify({'pages': pages_out, 'max_chars': max_chars})
+
+@app.route('/api/conversions/<conversion_id>/summary')
+def get_conversion_summary(conversion_id):
+    auth_err = _require_login()
+    if auth_err:
+        return auth_err
+
+    saved = _db_get_conversion(conversion_id)
+    if not saved:
+        return jsonify({'error': 'Conversão não encontrada'}), 404
+    uid = saved.get('user_uid')
+    if uid and g.firebase_user and uid != g.firebase_user.get('uid'):
+        return jsonify({'error': 'Conversão não encontrada'}), 404
+
+    try:
+        max_chars = int(request.args.get('max_chars') or 8000)
+    except Exception:
+        max_chars = 8000
+    max_chars = max(800, min(50000, max_chars))
+
+    try:
+        max_pages = int(request.args.get('max_pages') or 120)
+    except Exception:
+        max_pages = 120
+    max_pages = max(1, min(2000, max_pages))
+
+    parts = []
+    if FIRESTORE_CLIENT is not None:
+        try:
+            docs = (
+                FIRESTORE_CLIENT.collection('conversions')
+                .document(conversion_id)
+                .collection('pages')
+                .stream()
+            )
+            for i, d in enumerate(docs):
+                if i >= max_pages:
+                    break
+                pd = d.to_dict() or {}
+                t = (pd.get('text') or '').strip()
+                if t:
+                    parts.append(t)
+        except Exception as e:
+            return jsonify({'error': f'Erro ao carregar texto: {str(e)}'}), 500
+    else:
+        with DB_LOCK:
+            conn = _db_connect()
+            try:
+                rows = conn.execute(
+                    f'SELECT text FROM pages WHERE conversion_id={_ph()} ORDER BY page_number ASC',
+                    (conversion_id,)
+                ).fetchall()
+                for i, r in enumerate(rows):
+                    if i >= max_pages:
+                        break
+                    t = (r['text'] or '').strip()
+                    if t:
+                        parts.append(t)
+            finally:
+                conn.close()
+
+    text = clean_text_for_tts('\n\n'.join(parts))
+    if not text:
+        return jsonify({'error': 'Texto não disponível para resumo'}), 404
+    if len(text) > max_chars:
+        text = text[:max_chars]
+
+    from collections import Counter
+
+    sentences = re.split(r'(?<=[\.\!\?])\s+', text)
+    sentences = [s.strip() for s in sentences if s and len(s.strip()) >= 20]
+    if not sentences:
+        return jsonify({'error': 'Texto insuficiente para resumo'}), 404
+
+    stop = set([
+        'a','o','os','as','um','uma','uns','umas','de','do','da','dos','das','em','no','na','nos','nas','por','para','com','sem',
+        'e','ou','mas','se','que','quem','como','quando','onde','porque','pois','já','também','muito','mais','menos','há','é','são','ser',
+        'the','a','an','and','or','but','to','of','in','on','for','with','without','is','are','be','as','by','at','from','this','that'
+    ])
+    words = re.findall(r'[\wÀ-ÿ]{3,}', text.lower())
+    freq = Counter([w for w in words if w not in stop])
+
+    scored = []
+    for idx, s in enumerate(sentences):
+        ws = re.findall(r'[\wÀ-ÿ]{3,}', s.lower())
+        score = 0.0
+        for w in ws:
+            if w in stop:
+                continue
+            score += float(freq.get(w, 0))
+        score = score / max(1, len(ws))
+        scored.append((score, idx, s))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    top = sorted(scored[:9], key=lambda x: x[1])
+    picked = [t[2] for t in top] if top else sentences[:6]
+
+    while len(picked) < 6:
+        picked.append(sentences[min(len(sentences) - 1, len(picked))])
+    picked = picked[:9]
+
+    p1 = ' '.join(picked[0:3]).strip()
+    p2 = ' '.join(picked[3:6]).strip()
+    p3 = ' '.join(picked[6:9]).strip() if len(picked) > 6 else ''
+    paras = [p for p in [p1, p2, p3] if p]
+    summary = '\n\n'.join(paras).strip()
+
+    return jsonify({
+        'conversion_id': conversion_id,
+        'summary': summary
+    })
+
+@app.route('/api/prompt/processing')
+def processing_prompt():
+    return jsonify({
+        'prompt': (
+            "Você é um motor de processamento de documentos. Ao receber o texto deste PDF:\n\n"
+            "Limpeza Técnica: Ignore cabeçalhos, rodapés, números de página e bibliografias para não interromper a fluidez da leitura.\n\n"
+            "Resumo: Gere um resumo executivo de 3 parágrafos destacando os pontos principais para ser exibido na interface antes do áudio.\n\n"
+            "Tom de Voz: Ajuste o texto para uma leitura natural, substituindo abreviações complexas por palavras por extenso que soem melhor em TTS (Text-to-Speech)."
+        )
+    })
 
 @app.route('/api/conversions/<conversion_id>/delete', methods=['POST'])
 def delete_conversion(conversion_id):
