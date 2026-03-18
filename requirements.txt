@@ -10,3 +10,4 @@ gunicorn>=21.2.0
 psycopg[binary]>=3.2.0
 pytesseract>=0.3.10
 Pillow>=10.0.0
+zipstream-ng>=1.8.0
