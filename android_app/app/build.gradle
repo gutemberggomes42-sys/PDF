@@ -3,9 +3,31 @@ plugins {
     id "org.jetbrains.kotlin.android"
 }
 
+import java.util.Properties
+import java.io.FileInputStream
+
 android {
     namespace "com.novapasta.pdftoaudio"
     compileSdk 34
+
+    def keystorePropsFile = rootProject.file("keystore.properties")
+    def keystoreProps = new Properties()
+    def hasReleaseSigning = false
+    if (keystorePropsFile.exists()) {
+        keystoreProps.load(new FileInputStream(keystorePropsFile))
+        hasReleaseSigning = true
+    }
+
+    if (hasReleaseSigning) {
+        signingConfigs {
+            release {
+                storeFile rootProject.file(keystoreProps["storeFile"] ?: "")
+                storePassword keystoreProps["storePassword"] ?: ""
+                keyAlias keystoreProps["keyAlias"] ?: ""
+                keyPassword keystoreProps["keyPassword"] ?: ""
+            }
+        }
+    }
 
     defaultConfig {
         applicationId "com.novapasta.pdftoaudio"
@@ -19,6 +41,9 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 
