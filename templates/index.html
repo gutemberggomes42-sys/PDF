@@ -8,6 +8,7 @@
     <meta http-equiv="Expires" content="0">
     <title>ReadOut — Ggomes-Log</title>
     <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" href="/static/icons/readout.svg" type="image/svg+xml">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
@@ -15,6 +16,12 @@
     <style>
         .gradient-bg {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        body {
+            background-image: url('/static/brand/background.jpg'), url('/static/brand/background.svg');
+            background-size: cover;
+            background-attachment: fixed;
+            background-position: center;
         }
         .upload-area {
             border: 3px dashed #cbd5e0;
