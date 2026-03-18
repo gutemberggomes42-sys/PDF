@@ -964,12 +964,20 @@
 
         async function refreshToken(user) {
             authToken = await user.getIdToken();
+            try {
+                document.cookie = `auth_token=${encodeURIComponent(authToken)}; Path=/; SameSite=Lax; Max-Age=3600`;
+            } catch (e) {
+            }
         }
 
         async function apiFetch(url, options = {}) {
             if (!authToken && firebaseAuth.currentUser) {
                 try {
                     authToken = await firebaseAuth.currentUser.getIdToken();
+                    try {
+                        document.cookie = `auth_token=${encodeURIComponent(authToken)}; Path=/; SameSite=Lax; Max-Age=3600`;
+                    } catch (e) {
+                    }
                 } catch (e) {
                     authToken = null;
                 }
@@ -1058,6 +1066,10 @@
         logoutBtn.addEventListener('click', async () => {
             try {
                 await firebaseAuth.signOut();
+            } catch (e) {
+            }
+            try {
+                document.cookie = 'auth_token=; Path=/; Max-Age=0';
             } catch (e) {
             }
         });
@@ -1485,7 +1497,10 @@
                         <i class="fas fa-compress-alt mr-2"></i>Juntar áudios
                     </button>
                     <button id="libraryZipBtn_${conversionId}" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition">
-                        <i class="fas fa-file-archive mr-2"></i>Baixar ZIP
+                        <i class="fas fa-file-archive mr-2"></i>Baixar todos (ZIP)
+                    </button>
+                    <button id="libraryOfflineBtn_${conversionId}" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition">
+                        <i class="fas fa-cloud-download-alt mr-2"></i>Salvar offline
                     </button>
                     <button id="libraryDeleteBtn_${conversionId}" class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-red-700 transition">
                         <i class="fas fa-trash mr-2"></i>Excluir pasta
@@ -1769,6 +1784,7 @@
         function wireLibraryActions(conversionId, canMerge) {
             const mergeBtn = document.getElementById(`libraryMergeBtn_${conversionId}`);
             const zipBtn = document.getElementById(`libraryZipBtn_${conversionId}`);
+            const offlineBtn = document.getElementById(`libraryOfflineBtn_${conversionId}`);
             const deleteBtn = document.getElementById(`libraryDeleteBtn_${conversionId}`);
             const mergedBtn = document.getElementById(`libraryDownloadMergedBtn_${conversionId}`);
             const msg = document.getElementById(`libraryActionMsg_${conversionId}`);
@@ -1826,6 +1842,22 @@
                         msg.textContent = e.message || 'Erro ao baixar ZIP';
                     } finally {
                         zipBtn.disabled = false;
+                    }
+                });
+            }
+
+            if (offlineBtn) {
+                offlineBtn.addEventListener('click', async () => {
+                    offlineBtn.disabled = true;
+                    msg.textContent = 'Salvando offline...';
+                    try {
+                        await cacheAudioForOffline(conversionId);
+                        msg.textContent = 'Salvo offline.';
+                        setTimeout(() => { try { msg.textContent = ''; } catch (e) {} }, 1500);
+                    } catch (e) {
+                        msg.textContent = e.message || 'Erro ao salvar offline';
+                    } finally {
+                        offlineBtn.disabled = false;
                     }
                 });
             }
@@ -3138,6 +3170,22 @@
             if (!downloadUrl) {
                 throw new Error('Tempo excedido ao gerar ZIP');
             }
+            const isAndroidApp = (navigator.userAgent || '').includes('PdfToAudioAndroid');
+            if (isAndroidApp) {
+                setZipProgress(true, 'Iniciando download... (veja a notificação do Android)', 100);
+                try {
+                    const a = document.createElement('a');
+                    a.href = `${downloadUrl}?t=${Date.now()}`;
+                    a.target = '_blank';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                } catch (e) {
+                    window.location.href = `${downloadUrl}?t=${Date.now()}`;
+                }
+                setTimeout(() => setZipProgress(false), 1200);
+                return;
+            }
             setZipProgress(true, 'Baixando ZIP...', 0);
             const { blob, filename } = await xhrDownloadWithProgress(`${downloadUrl}?t=${Date.now()}`, fallback);
             const url = window.URL.createObjectURL(blob);
@@ -3198,9 +3246,14 @@
                 const req = new Request(url, { method: 'GET', cache: 'no-store' });
                 const existing = await cache.match(req);
                 if (existing) continue;
-                const r = await fetch(req);
+                const headers = new Headers();
+                try {
+                    if (serverRequireAuth && authToken) headers.set('Authorization', `Bearer ${authToken}`);
+                } catch (e) {
+                }
+                const r = await fetch(url, { cache: 'no-store', headers });
                 if (!r.ok) throw new Error(`Falha ao baixar áudio (HTTP ${r.status})`);
-                await cache.put(req, r.clone());
+                await cache.put(new Request(url), r.clone());
             }
 
             const title = st.book_title || st.filename || 'audiobook';

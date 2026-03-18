@@ -8,6 +8,7 @@ import android.os.Environment
 import android.webkit.DownloadListener
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.URLUtil
@@ -72,6 +73,13 @@ class MainActivity : AppCompatActivity() {
             val request = DownloadManager.Request(Uri.parse(url))
             request.setMimeType(mimetype)
             request.addRequestHeader("User-Agent", userAgent)
+            try {
+                val cookie = CookieManager.getInstance().getCookie(url)
+                if (!cookie.isNullOrBlank()) {
+                    request.addRequestHeader("Cookie", cookie)
+                }
+            } catch (e: Exception) {
+            }
             request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, URLUtil.guessFileName(url, contentDisposition, mimetype))
             val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager

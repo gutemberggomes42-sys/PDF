@@ -22,6 +22,7 @@ import random
 import secrets
 import subprocess
 import re
+from urllib.parse import unquote
 try:
     import firebase_admin
     from firebase_admin import credentials as firebase_credentials
@@ -316,6 +317,21 @@ def _load_user():
                 'email': claims.get('email'),
                 'name': claims.get('name')
             }
+            return
+    ctk = request.cookies.get('auth_token', '')
+    if ctk:
+        try:
+            token = unquote(ctk).strip()
+        except Exception:
+            token = str(ctk).strip()
+        if token:
+            claims = _verify_id_token(token)
+            if claims:
+                g.firebase_user = {
+                    'uid': claims.get('uid'),
+                    'email': claims.get('email'),
+                    'name': claims.get('name')
+                }
 
 def _require_login():
     if not REQUIRE_AUTH:
