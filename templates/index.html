@@ -443,6 +443,10 @@
                                 <i class="fas fa-play mr-2"></i>
                                 Play All
                             </button>
+                            <button id="resumeListenBtn" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition">
+                                <i class="fas fa-redo mr-2"></i>
+                                Continuar
+                            </button>
                             <button id="stopAllBtn" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition">
                                 <i class="fas fa-stop mr-2"></i>
                                 Stop
@@ -595,12 +599,53 @@
             return `playback:${conversionId || ''}:${filename || ''}`;
         }
 
+        function playbackLastKey(conversionId) {
+            return `playback:last:${conversionId || ''}`;
+        }
+
+        function savePlaybackLast(conversionId, filename) {
+            try {
+                const k = playbackLastKey(conversionId);
+                if (!k) return;
+                if (!filename) return;
+                localStorage.setItem(k, String(filename));
+            } catch (e) {
+            }
+        }
+
+        function loadPlaybackLast(conversionId) {
+            try {
+                const k = playbackLastKey(conversionId);
+                const v = localStorage.getItem(k);
+                return v ? String(v) : '';
+            } catch (e) {
+                return '';
+            }
+        }
+
         function savePlaybackPos(conversionId, filename, seconds) {
             try {
                 const k = playbackKey(conversionId, filename);
                 if (!k) return;
                 localStorage.setItem(k, String(seconds || 0));
             } catch (e) {
+            }
+        }
+
+        function getOfflinePageText(conversionId, pageNumber) {
+            try {
+                const raw = localStorage.getItem(`offline_manifest_${conversionId}`) || '';
+                if (!raw) return null;
+                const j = JSON.parse(raw);
+                const pages = j && Array.isArray(j.pages) ? j.pages : [];
+                const pn = parseInt(pageNumber || '0', 10);
+                for (const p of pages) {
+                    const ppn = parseInt(p.page_number || '0', 10);
+                    if (ppn === pn) return { text: p.text || '' };
+                }
+                return null;
+            } catch (e) {
+                return null;
             }
         }
 
@@ -883,6 +928,7 @@
         const offlineVoiceStatus = document.getElementById('offlineVoiceStatus');
         const mainAudioPlayer = document.getElementById('mainAudioPlayer');
         const playAllBtn = document.getElementById('playAllBtn');
+        const resumeListenBtn = document.getElementById('resumeListenBtn');
         const stopAllBtn = document.getElementById('stopAllBtn');
         const mergeAudioBtn = document.getElementById('mergeAudioBtn');
         const downloadMergedBtn = document.getElementById('downloadMergedBtn');
@@ -1619,6 +1665,14 @@
                     display_label: p.display_label || null
                 });
             }
+            try {
+                const last = loadPlaybackLast(conversionId);
+                if (last) {
+                    const idx = libraryPlaylist.findIndex(x => x && x.filename === last);
+                    if (idx >= 0) libraryCurrentIndex = idx;
+                }
+            } catch (e) {
+            }
 
             function updateNow() {
                 if (!libraryPlaylist.length) {
@@ -1659,6 +1713,16 @@
                 if (libraryFollowStatus) libraryFollowStatus.textContent = 'Carregando texto...';
                 if (libraryFollowBody) libraryFollowBody.textContent = '';
                 try {
+                    const off = getOfflinePageText(conversionId, pageNumber);
+                    if (off && (off.text || '').trim()) {
+                        const txt = off.text || '';
+                        libSegments = splitToSegments(txt);
+                        if (libraryFollowStatus) libraryFollowStatus.textContent = label ? label : '';
+                        renderSegments(libraryFollowBody, libSegments);
+                        libActive = 0;
+                        setActiveSegment(libraryFollowBody, 0);
+                        return;
+                    }
                     const r = await apiFetch(`/api/conversions/${conversionId}/page-text/${pageNumber}`);
                     if (!r.ok) {
                         const j = await r.json().catch(() => ({}));
@@ -1692,6 +1756,10 @@
                 if (!libraryPlaylist.length) return;
                 libraryCurrentIndex = Math.max(0, Math.min(index, libraryPlaylist.length - 1));
                 const cur = libraryPlaylist[libraryCurrentIndex];
+                try {
+                    if (conversionId && cur && cur.filename) savePlaybackLast(conversionId, cur.filename);
+                } catch (e) {
+                }
                 libraryAudioEl.src = cur.src;
                 updateNow();
                 highlightLibraryCard(libraryCurrentIndex);
@@ -2409,6 +2477,16 @@
             if (followTextStatus) followTextStatus.textContent = 'Carregando texto...';
             if (followTextBody) followTextBody.textContent = '';
             try {
+                const off = getOfflinePageText(conversionId, pageNumber);
+                if (off && (off.text || '').trim()) {
+                    const txt = off.text || '';
+                    followSegments = splitToSegments(txt);
+                    if (followTextStatus) followTextStatus.textContent = followSegments.length ? '' : 'Texto vazio';
+                    renderSegments(followTextBody, followSegments);
+                    setActiveSegment(followTextBody, 0);
+                    followActiveSeg = 0;
+                    return;
+                }
                 const r = await apiFetch(`/api/conversions/${conversionId}/page-text/${pageNumber}`);
                 if (!r.ok) {
                     const j = await r.json().catch(() => ({}));
@@ -2487,11 +2565,38 @@
                 playAllBtn.innerHTML = '<i class="fas fa-play mr-2"></i>Play All';
                 isPlaying = false;
             } else {
-                playTrack(0);
+                let idx = 0;
+                try {
+                    const last = loadPlaybackLast(currentConversionId);
+                    if (last) {
+                        const found = playlist.findIndex(x => x && x.filename === last);
+                        if (found >= 0) idx = found;
+                    }
+                } catch (e) {
+                }
+                playTrack(idx);
                 playAllBtn.innerHTML = '<i class="fas fa-pause mr-2"></i>Pause';
                 isPlaying = true;
             }
         });
+
+        if (resumeListenBtn) {
+            resumeListenBtn.addEventListener('click', () => {
+                if (!currentConversionId || !playlist.length) return;
+                let idx = 0;
+                try {
+                    const last = loadPlaybackLast(currentConversionId);
+                    if (last) {
+                        const found = playlist.findIndex(x => x && x.filename === last);
+                        if (found >= 0) idx = found;
+                    }
+                } catch (e) {
+                }
+                playTrack(idx);
+                playAllBtn.innerHTML = '<i class="fas fa-pause mr-2"></i>Pause';
+                isPlaying = true;
+            });
+        }
 
         stopAllBtn.addEventListener('click', () => {
             mainAudioPlayer.pause();
@@ -2539,6 +2644,10 @@
             
             currentTrackIndex = index;
             const track = playlist[index];
+            try {
+                if (currentConversionId && track && track.filename) savePlaybackLast(currentConversionId, track.filename);
+            } catch (e) {
+            }
             mainAudioPlayer.src = `/play/${currentConversionId}/${track.filename}`;
             mainAudioPlayer.load();
             const resumeAt = loadPlaybackPos(currentConversionId, track.filename);
@@ -3254,6 +3363,19 @@
                 const r = await fetch(url, { cache: 'no-store', headers });
                 if (!r.ok) throw new Error(`Falha ao baixar áudio (HTTP ${r.status})`);
                 await cache.put(new Request(url), r.clone());
+
+                try {
+                    const it = manifest[i] || {};
+                    const pn = it.page_number;
+                    if (pn) {
+                        const tr = await apiFetch(`/api/conversions/${conversionId}/page-text/${pn}?t=${Date.now()}`);
+                        if (tr.ok) {
+                            const tj = await tr.json().catch(() => ({}));
+                            it.text = tj.text || '';
+                        }
+                    }
+                } catch (e) {
+                }
             }
 
             const title = st.book_title || st.filename || 'audiobook';
