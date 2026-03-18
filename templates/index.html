@@ -32,7 +32,7 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
         body {
-            background-image: url('/static/brand/background.jpg'), url('/static/brand/background.svg');
+            background-image: url('/static/brand/background.svg');
             background-size: cover;
             background-attachment: fixed;
             background-position: center;
@@ -967,6 +967,7 @@
                         <canvas id="immWave" height="70" style="width: 100%; height: 70px;"></canvas>
                         <div class="mt-3 flex flex-wrap items-center gap-2">
                             <button id="immPrev" class="chip-glass px-4 py-2 btn-pill"><i class="fas fa-step-backward"></i></button>
+                            <button id="immResume" class="chip-glass px-4 py-2 btn-pill"><i class="fas fa-rotate-left mr-2"></i>Retomar</button>
                             <button id="immPlay" class="btn-primary btn-glow text-white px-5 py-2 btn-pill"><i class="fas fa-play mr-2"></i>Tocar</button>
                             <button id="immNext" class="chip-glass px-4 py-2 btn-pill"><i class="fas fa-step-forward"></i></button>
                             <div class="flex-1"></div>
@@ -1417,6 +1418,7 @@
         const immWave = document.getElementById('immWave');
         const immNow = document.getElementById('immNow');
         const immPrev = document.getElementById('immPrev');
+        const immResume = document.getElementById('immResume');
         const immPlay = document.getElementById('immPlay');
         const immNext = document.getElementById('immNext');
         const immStop = document.getElementById('immStop');
@@ -3401,13 +3403,28 @@
             immDraw();
         }
 
-        function immStop() {
+        function immStopAnim() {
             if (immAnimId) cancelAnimationFrame(immAnimId);
             immAnimId = 0;
         }
 
         if (immClose) immClose.addEventListener('click', () => showImmersive(false));
         if (immPrev) immPrev.addEventListener('click', () => { if (playlist.length) playTrack(Math.max(0, currentTrackIndex - 1)); });
+        if (immResume) {
+            immResume.addEventListener('click', () => {
+                if (!currentConversionId || !playlist.length) return;
+                let idx = 0;
+                try {
+                    const last = loadPlaybackLast(currentConversionId);
+                    if (last) {
+                        const found = playlist.findIndex(x => x && x.filename === last);
+                        if (found >= 0) idx = found;
+                    }
+                } catch (e) {
+                }
+                playTrack(idx);
+            });
+        }
         if (immNext) immNext.addEventListener('click', () => { if (playlist.length) playTrack(Math.min(playlist.length - 1, currentTrackIndex + 1)); });
         if (immStop) immStop.addEventListener('click', () => { try { stopAllBtn.click(); } catch (e) {} });
         if (immPlay) {
@@ -3791,7 +3808,13 @@
         function showResults(status) {
             progressSection.classList.add('hidden');
             resultsSection.classList.remove('hidden');
-            clearActiveConversion();
+            try {
+                if (currentConversionId) {
+                    saveActiveConversion(currentConversionId);
+                    setActivePhase('completed', currentConversionId);
+                }
+            } catch (e) {
+            }
             if (downloadM4bBtn) downloadM4bBtn.classList.add('hidden');
 
             const audioFilesList = document.getElementById('audioFilesList');
@@ -3812,6 +3835,15 @@
 
             if (status.pages_info && status.pages_info.length > 0) {
                 playlist = status.pages_info;
+                currentTrackIndex = 0;
+                try {
+                    const last = loadPlaybackLast(currentConversionId);
+                    if (last) {
+                        const found = playlist.findIndex(x => x && x.filename === last);
+                        if (found >= 0) currentTrackIndex = found;
+                    }
+                } catch (e) {
+                }
                 
                 status.pages_info.forEach((pageInfo, index) => {
                     const label = pageInfo.display_label || `Página ${pageInfo.page_number}`;
@@ -3842,6 +3874,15 @@
                     page_number: index + 1,
                     filename: file.split('/').pop()
                 }));
+                currentTrackIndex = 0;
+                try {
+                    const last = loadPlaybackLast(currentConversionId);
+                    if (last) {
+                        const found = playlist.findIndex(x => x && x.filename === last);
+                        if (found >= 0) currentTrackIndex = found;
+                    }
+                } catch (e) {
+                }
                 
                 status.audio_files.forEach((file, index) => {
                     const filename = file.split('/').pop();
